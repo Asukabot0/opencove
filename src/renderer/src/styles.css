@@ -228,4 +228,6 @@ body {
     transparent 85% 100%
   );
   cursor: nwse-resize;
+  z-index: 2;
+  touch-action: none;
 }

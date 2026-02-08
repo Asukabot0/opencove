@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -47,6 +47,10 @@ function WorkspaceCanvasInner({
   } | null>(null)
 
   const reactFlow = useReactFlow<TerminalNodeData>()
+
+  const closeNodeRef = useRef<(nodeId: string) => Promise<void>>(async () => undefined)
+  const resizeNodeRef = useRef<(nodeId: string, desiredSize: Size) => void>(() => undefined)
+
   const upsertNode = useCallback(
     (nextNode: Node<TerminalNodeData>) => {
       onNodesChange(nodes.map(node => (node.id === nextNode.id ? nextNode : node)))
@@ -101,6 +105,14 @@ function WorkspaceCanvasInner({
     [nodes, upsertNode],
   )
 
+  useEffect(() => {
+    closeNodeRef.current = closeNode
+  }, [closeNode])
+
+  useEffect(() => {
+    resizeNodeRef.current = resizeNode
+  }, [resizeNode])
+
   const nodeTypes = useMemo(
     () => ({
       terminalNode: ({ data, id }: { data: TerminalNodeData; id: string }) => (
@@ -110,13 +122,13 @@ function WorkspaceCanvasInner({
           width={data.width}
           height={data.height}
           onClose={() => {
-            void closeNode(id)
+            void closeNodeRef.current(id)
           }}
-          onResize={size => resizeNode(id, size)}
+          onResize={size => resizeNodeRef.current(id, size)}
         />
       ),
     }),
-    [closeNode, resizeNode],
+    [],
   )
 
   const handlePaneContextMenu = useCallback(

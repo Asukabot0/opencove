@@ -27,7 +27,6 @@ export function TerminalNode({
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const nodeRef = useRef<HTMLDivElement | null>(null)
   const resizeStartRef = useRef<{
     x: number
     y: number
@@ -37,6 +36,21 @@ export function TerminalNode({
 
   const [isResizing, setIsResizing] = useState(false)
   const sizeStyle = useMemo(() => ({ width, height }), [width, height])
+
+  const syncTerminalSize = useCallback(() => {
+    const terminal = terminalRef.current
+    const fitAddon = fitAddonRef.current
+    if (!terminal || !fitAddon) {
+      return
+    }
+
+    fitAddon.fit()
+    void window.coveApi.pty.resize({
+      sessionId,
+      cols: terminal.cols,
+      rows: terminal.rows,
+    })
+  }, [sessionId])
 
   useEffect(() => {
     const terminal = new Terminal({
@@ -60,8 +74,7 @@ export function TerminalNode({
 
     if (containerRef.current) {
       terminal.open(containerRef.current)
-      fitAddon.fit()
-      window.coveApi.pty.resize({ sessionId, cols: terminal.cols, rows: terminal.rows })
+      requestAnimationFrame(syncTerminalSize)
     }
 
     const disposable = terminal.onData(data => {
@@ -90,32 +103,18 @@ export function TerminalNode({
       unsubscribeExit()
       terminal.dispose()
     }
-  }, [sessionId])
+  }, [sessionId, syncTerminalSize])
 
   useEffect(() => {
-    if (!fitAddonRef.current || !terminalRef.current) {
-      return
-    }
-
-    const frame = requestAnimationFrame(() => {
-      fitAddonRef.current?.fit()
-      const terminal = terminalRef.current
-      if (terminal) {
-        void window.coveApi.pty.resize({
-          sessionId,
-          cols: terminal.cols,
-          rows: terminal.rows,
-        })
-      }
-    })
-
+    const frame = requestAnimationFrame(syncTerminalSize)
     return () => cancelAnimationFrame(frame)
-  }, [height, sessionId, width])
+  }, [height, syncTerminalSize, width])
 
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
       event.preventDefault()
       event.stopPropagation()
+      event.currentTarget.setPointerCapture(event.pointerId)
 
       resizeStartRef.current = {
         x: event.clientX,
@@ -162,8 +161,7 @@ export function TerminalNode({
 
   return (
     <div
-      ref={nodeRef}
-      className="terminal-node"
+      className="terminal-node nowheel"
       style={sizeStyle}
       onWheelCapture={event => {
         event.stopPropagation()

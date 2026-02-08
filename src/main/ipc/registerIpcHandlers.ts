@@ -1,4 +1,5 @@
 import { dialog, ipcMain, webContents } from 'electron'
+import { basename, resolve } from 'node:path'
 import { IPC_CHANNELS } from '../../shared/constants/ipc'
 import type {
   KillTerminalInput,
@@ -21,6 +22,15 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   ipcMain.handle(
     IPC_CHANNELS.workspaceSelectDirectory,
     async (): Promise<WorkspaceDirectory | null> => {
+      if (process.env.COVE_TEST_WORKSPACE) {
+        const testWorkspacePath = resolve(process.env.COVE_TEST_WORKSPACE)
+        return {
+          id: crypto.randomUUID(),
+          name: basename(testWorkspacePath),
+          path: testWorkspacePath,
+        }
+      }
+
       const result = await dialog.showOpenDialog({
         properties: ['openDirectory'],
       })
