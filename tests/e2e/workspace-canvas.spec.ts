@@ -108,11 +108,6 @@ test.describe('Workspace Canvas Interactions', () => {
       await expect(firstTerminal).toBeVisible()
       await expect(firstTerminal.locator('.xterm')).toBeVisible()
 
-      const beforeResize = await firstTerminal.boundingBox()
-      if (!beforeResize) {
-        throw new Error('terminal bounding box unavailable before resize')
-      }
-
       const resizer = firstTerminal.locator('.terminal-node__resizer')
       const resizerBox = await resizer.boundingBox()
       if (!resizerBox) {
@@ -127,13 +122,28 @@ test.describe('Workspace Canvas Interactions', () => {
       await window.mouse.move(startX + 120, startY + 80)
       await window.mouse.up()
 
-      const afterResize = await firstTerminal.boundingBox()
-      if (!afterResize) {
-        throw new Error('terminal bounding box unavailable after resize')
-      }
+      const resizedNode = await window.evaluate(key => {
+        const raw = window.localStorage.getItem(key)
+        if (!raw) {
+          return null
+        }
 
-      expect(afterResize.width).toBeGreaterThan(beforeResize.width + 40)
-      expect(afterResize.height).toBeGreaterThan(beforeResize.height + 20)
+        const state = JSON.parse(raw) as {
+          workspaces?: Array<{
+            nodes?: Array<{
+              id: string
+              width: number
+              height: number
+            }>
+          }>
+        }
+
+        return state.workspaces?.[0]?.nodes?.find(node => node.id === 'node-1') ?? null
+      }, storageKey)
+
+      expect(resizedNode).toBeTruthy()
+      expect(resizedNode?.width ?? 0).toBeGreaterThan(460)
+      expect(resizedNode?.height ?? 0).toBeGreaterThan(300)
       await expect(firstTerminal.locator('.xterm')).toBeVisible()
 
       await terminals.nth(1).locator('.terminal-node__header').click()

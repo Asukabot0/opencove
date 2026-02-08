@@ -41,8 +41,8 @@ E2E 启动 Electron 时必须注入该变量，避免系统原生弹窗阻塞。
 
 已在 `tests/e2e/workspace-canvas.spec.ts` 中采用：
 
-- **基础流程测试**：验证 `Add` 可创建 workspace。
 - **交互稳定性测试**：先向 localStorage 注入带 1~2 个终端节点的状态，再 reload。
+- **启动冒烟测试**：继续由 `tests/e2e/smoke.spec.ts` 覆盖窗口与应用启动可用性。
 
 这样可稳定覆盖以下核心场景：
 
