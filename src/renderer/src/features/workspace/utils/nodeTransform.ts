@@ -12,6 +12,7 @@ export function toRuntimeNodes(workspace: PersistedWorkspaceState): Node<Termina
       width: node.width,
       height: node.height,
     },
-    dragHandle: '[data-node-drag-handle="true"]',
+    draggable: true,
+    selectable: true,
   }))
 }

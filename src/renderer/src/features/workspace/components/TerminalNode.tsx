@@ -171,7 +171,7 @@ export function TerminalNode({
         <span className="terminal-node__title">{title}</span>
         <button
           type="button"
-          className="terminal-node__close"
+          className="terminal-node__close nodrag"
           onClick={event => {
             event.stopPropagation()
             onClose()
@@ -180,10 +180,10 @@ export function TerminalNode({
           ×
         </button>
       </div>
-      <div ref={containerRef} className="terminal-node__terminal" />
+      <div ref={containerRef} className="terminal-node__terminal nodrag" />
       <button
         type="button"
-        className="terminal-node__resizer"
+        className="terminal-node__resizer nodrag"
         onPointerDown={handleResizePointerDown}
         aria-label="Resize terminal"
       />

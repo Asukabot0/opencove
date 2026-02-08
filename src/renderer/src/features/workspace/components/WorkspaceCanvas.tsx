@@ -6,6 +6,7 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  applyNodeChanges,
   useReactFlow,
   type Node,
   type NodeChange,
@@ -186,7 +187,8 @@ function WorkspaceCanvasInner({
         width: DEFAULT_SIZE.width,
         height: DEFAULT_SIZE.height,
       },
-      dragHandle: '[data-node-drag-handle="true"]',
+      draggable: true,
+      selectable: true,
     }
 
     const nextNodes = [...nodes, nextNode]
@@ -200,16 +202,41 @@ function WorkspaceCanvasInner({
         return
       }
 
-      const nextNodes = nodes.map(node => {
-        const positionChange = changes.find(
-          change => change.type === 'position' && change.id === node.id,
-        )
-        if (!positionChange || !positionChange.position) {
-          return node
-        }
+      const removedIds = new Set(
+        changes.filter(change => change.type === 'remove').map(change => change.id),
+      )
 
-        if (!positionChange.dragging) {
-          const resolved = normalizePosition(node.id, positionChange.position, {
+      if (removedIds.size > 0) {
+        nodes.forEach(node => {
+          if (!removedIds.has(node.id)) {
+            return
+          }
+
+          void window.coveApi.pty.kill({ sessionId: node.data.sessionId })
+        })
+      }
+
+      const survivingNodes = nodes.filter(node => !removedIds.has(node.id))
+      const nonRemoveChanges = changes.filter(change => change.type !== 'remove')
+
+      let nextNodes = applyNodeChanges(nonRemoveChanges, survivingNodes)
+
+      const settledPositionChanges = changes.filter(
+        change =>
+          change.type === 'position' &&
+          !change.dragging &&
+          change.position !== undefined &&
+          !removedIds.has(change.id),
+      )
+
+      if (settledPositionChanges.length > 0) {
+        nextNodes = nextNodes.map(node => {
+          const settledChange = settledPositionChanges.find(change => change.id === node.id)
+          if (!settledChange || !settledChange.position) {
+            return node
+          }
+
+          const resolved = normalizePosition(node.id, settledChange.position, {
             width: node.data.width,
             height: node.data.height,
           })
@@ -218,28 +245,10 @@ function WorkspaceCanvasInner({
             ...node,
             position: resolved,
           }
-        }
-
-        return {
-          ...node,
-          position: positionChange.position,
-        }
-      })
-
-      const removedNodes = nodes.filter(node =>
-        changes.some(change => change.type === 'remove' && change.id === node.id),
-      )
-
-      if (removedNodes.length) {
-        removedNodes.forEach(node => {
-          void window.coveApi.pty.kill({ sessionId: node.data.sessionId })
         })
       }
 
-      const removeIds = new Set(removedNodes.map(node => node.id))
-
-      const finalNodes = nextNodes.filter(node => !removeIds.has(node.id))
-      onNodesChange(finalNodes)
+      onNodesChange(nextNodes)
     },
     [nodes, normalizePosition, onNodesChange],
   )
@@ -252,6 +261,8 @@ function WorkspaceCanvasInner({
         nodeTypes={nodeTypes}
         onNodesChange={applyChanges}
         onPaneContextMenu={handlePaneContextMenu}
+        nodesDraggable
+        elementsSelectable
         zoomOnScroll
         panOnScroll={false}
         zoomOnPinch
