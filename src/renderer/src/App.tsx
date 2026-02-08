@@ -126,6 +126,22 @@ function App(): JSX.Element {
 
           const hydratedNodeResults = await Promise.allSettled(
             runtimeNodes.map(async node => {
+              if (node.data.kind === 'task') {
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    sessionId: '',
+                    status: null,
+                    startedAt: null,
+                    endedAt: null,
+                    exitCode: null,
+                    lastError: null,
+                    agent: null,
+                  },
+                }
+              }
+
               if (node.data.kind === 'agent' && node.data.agent) {
                 try {
                   const restoredAgent = await window.coveApi.agent.launch({
@@ -201,6 +217,7 @@ function App(): JSX.Element {
                   exitCode: null,
                   lastError: null,
                   agent: null,
+                  task: null,
                 },
               }
             }),
@@ -392,10 +409,8 @@ function App(): JSX.Element {
                 node => node.data.kind === 'terminal',
               ).length
               const agentCount = workspace.nodes.filter(node => node.data.kind === 'agent').length
-              const metaText =
-                agentCount > 0
-                  ? `${terminalCount} terminals · ${agentCount} agents`
-                  : `${terminalCount} terminals`
+              const taskCount = workspace.nodes.filter(node => node.data.kind === 'task').length
+              const metaText = `${terminalCount} terminals · ${agentCount} agents · ${taskCount} tasks`
 
               return (
                 <button

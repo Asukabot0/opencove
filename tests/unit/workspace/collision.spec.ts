@@ -20,6 +20,7 @@ const baseNode = {
     exitCode: null,
     lastError: null,
     agent: null,
+    task: null,
   } satisfies TerminalNodeData,
 }
 
