@@ -137,6 +137,7 @@ function App(): JSX.Element {
                     endedAt: null,
                     exitCode: null,
                     lastError: null,
+                    scrollback: null,
                     agent: null,
                   },
                 }
@@ -168,6 +169,7 @@ function App(): JSX.Element {
                       endedAt: null,
                       exitCode: null,
                       lastError: null,
+                      scrollback: node.data.scrollback,
                       startedAt: node.data.startedAt ?? new Date().toISOString(),
                       agent: {
                         ...node.data.agent,
@@ -194,6 +196,7 @@ function App(): JSX.Element {
                       endedAt: new Date().toISOString(),
                       exitCode: null,
                       lastError: `Resume failed: ${toErrorMessage(error)}`,
+                      scrollback: node.data.scrollback,
                     },
                   }
                 }
@@ -216,6 +219,7 @@ function App(): JSX.Element {
                   endedAt: null,
                   exitCode: null,
                   lastError: null,
+                  scrollback: node.data.scrollback,
                   agent: null,
                   task: null,
                 },

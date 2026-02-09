@@ -32,6 +32,7 @@ const AGENT_RUNTIME_STATUSES: AgentRuntimeStatus[] = [
 const TASK_RUNTIME_STATUSES: TaskRuntimeStatus[] = ['todo', 'doing', 'ai_done', 'done']
 const AGENT_LAUNCH_MODES: AgentLaunchMode[] = ['new', 'resume']
 const EXECUTION_DIRECTORY_MODES: ExecutionDirectoryMode[] = ['workspace', 'custom']
+const MAX_PERSISTED_SCROLLBACK_CHARS = 200_000
 
 function getStorage(): Storage | null {
   if (typeof window === 'undefined') {
@@ -106,6 +107,22 @@ function normalizeProvider(value: unknown): AgentProvider | null {
   }
 
   return AGENT_PROVIDERS.includes(value as AgentProvider) ? (value as AgentProvider) : null
+}
+
+function normalizeScrollback(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  if (value.length === 0) {
+    return null
+  }
+
+  if (value.length <= MAX_PERSISTED_SCROLLBACK_CHARS) {
+    return value
+  }
+
+  return value.slice(-MAX_PERSISTED_SCROLLBACK_CHARS)
 }
 
 function ensurePersistedAgentData(value: unknown): AgentNodeData | null {
@@ -203,6 +220,7 @@ function ensurePersistedNode(node: unknown): PersistedTerminalNode | null {
     endedAt: normalizeOptionalString(record.endedAt),
     exitCode: typeof record.exitCode === 'number' ? record.exitCode : null,
     lastError: normalizeOptionalString(record.lastError),
+    scrollback: normalizeScrollback(record.scrollback),
     agent: kind === 'agent' ? agent : null,
     task: kind === 'task' ? task : null,
     position: {
@@ -329,6 +347,7 @@ export function toPersistedState(
         endedAt: node.data.endedAt,
         exitCode: node.data.exitCode,
         lastError: node.data.lastError,
+        scrollback: normalizeScrollback(node.data.scrollback),
         agent: node.data.agent,
         task: node.data.task,
       })),

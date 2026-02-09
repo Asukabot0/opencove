@@ -44,6 +44,7 @@ export interface TerminalNodeData {
   endedAt: string | null
   exitCode: number | null
   lastError: string | null
+  scrollback: string | null
   agent: AgentNodeData | null
   task: TaskNodeData | null
 }
@@ -74,6 +75,7 @@ export interface PersistedTerminalNode {
   endedAt: string | null
   exitCode: number | null
   lastError: string | null
+  scrollback: string | null
   agent: AgentNodeData | null
   task: TaskNodeData | null
 }

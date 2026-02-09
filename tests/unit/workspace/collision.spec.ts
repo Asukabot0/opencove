@@ -19,6 +19,7 @@ const baseNode = {
     endedAt: null,
     exitCode: null,
     lastError: null,
+    scrollback: null,
     agent: null,
     task: null,
   } satisfies TerminalNodeData,

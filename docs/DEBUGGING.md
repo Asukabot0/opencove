@@ -112,6 +112,27 @@ pnpm test:e2e
 
 - `tests/e2e/workspace-canvas.spec.ts` 中 `preserves terminal history after workspace switch`。
 
+### 症状 1.1：重启应用后终端历史丢失
+
+根因通常是：终端历史仅保存在主进程 PTY 内存快照；应用重启会导致进程与内存重建，因此必须把 scrollback 同步到渲染层持久化状态。
+
+修复策略：
+
+1. 为终端节点持久化结构增加 `scrollback` 字段。
+2. 终端组件在挂载时合并 `persisted scrollback` 与 `pty:snapshot`（避免重复拼接）。
+3. 终端输出变更后做节流回写（避免高频写 localStorage）。
+4. 回调需用 ref 持有，避免因函数引用变化导致 xterm 实例反复重建。
+
+快速验证：
+
+- 在终端执行 `echo <token>` 并确认可见；
+- 刷新窗口（或重启应用）；
+- 不按回车时也应仍能看到 `<token>`。
+
+对应用例：
+
+- `tests/e2e/workspace-canvas.spec.ts` 中 `preserves terminal history after app reload`。
+
 ### 症状 2：鼠标在终端上滚轮，画布不缩放但终端也不滚动
 
 常见原因是对终端容器使用了 `onWheelCapture + stopPropagation`，会阻断事件到达 xterm viewport。

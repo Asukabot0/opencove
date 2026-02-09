@@ -65,6 +65,7 @@ describe('workspace persistence', () => {
               endedAt: null,
               exitCode: null,
               lastError: null,
+              scrollback: 'terminal output line 1\nterminal output line 2\n',
               agent: null,
               task: null,
             },
@@ -84,6 +85,7 @@ describe('workspace persistence', () => {
               endedAt: null,
               exitCode: null,
               lastError: null,
+              scrollback: null,
               agent: null,
               task: {
                 requirement: 'Implement retry with backoff and jitter',
@@ -109,6 +111,7 @@ describe('workspace persistence', () => {
               endedAt: null,
               exitCode: null,
               lastError: null,
+              scrollback: '[cove-test-agent] codex new gpt-5.2-codex\n',
               agent: {
                 provider: 'codex',
                 prompt: 'Implement retry for failed request',
@@ -156,6 +159,7 @@ describe('workspace persistence', () => {
     expect(restored?.workspaces).toHaveLength(1)
     expect(restored?.workspaces[0].nodes).toHaveLength(3)
     expect(restored?.workspaces[0].nodes[0].title).toBe('terminal-1')
+    expect(restored?.workspaces[0].nodes[0].scrollback).toContain('terminal output line 2')
     expect(restored?.workspaces[0].nodes[1].kind).toBe('task')
     expect(restored?.workspaces[0].nodes[1].task?.status).toBe('doing')
     expect(restored?.workspaces[0].nodes[2].kind).toBe('agent')
@@ -169,6 +173,54 @@ describe('workspace persistence', () => {
     expect(restored?.settings.customModelOptionsByProvider.codex).toEqual(['gpt-5.2-codex'])
     expect(restored?.settings.taskTitleProvider).toBe('codex')
     expect(restored?.settings.taskTitleModel).toBe('gpt-5.2-codex')
+  })
+
+  it('truncates oversized terminal scrollback', () => {
+    const prefix = 'old\n'
+    const suffix = 'tail\n'
+    const oversized = `${prefix}${'x'.repeat(260_000)}${suffix}`
+
+    const persisted = toPersistedState(
+      [
+        {
+          id: 'workspace-1',
+          name: 'cove',
+          path: '/tmp/cove',
+          nodes: [
+            {
+              id: 'terminal-1',
+              type: 'terminalNode',
+              position: { x: 120, y: 120 },
+              data: {
+                sessionId: 'session-1',
+                title: 'terminal-1',
+                width: 460,
+                height: 300,
+                kind: 'terminal',
+                status: null,
+                startedAt: null,
+                endedAt: null,
+                exitCode: null,
+                lastError: null,
+                scrollback: oversized,
+                agent: null,
+                task: null,
+              },
+            },
+          ],
+        },
+      ],
+      'workspace-1',
+    )
+
+    writePersistedState(persisted)
+
+    const restored = readPersistedState()
+    const restoredScrollback = restored?.workspaces[0]?.nodes[0]?.scrollback ?? ''
+
+    expect(restoredScrollback.length).toBe(200_000)
+    expect(restoredScrollback).toContain(suffix)
+    expect(restoredScrollback).not.toContain(prefix)
   })
 
   it('falls back to default settings when persisted settings are missing', () => {

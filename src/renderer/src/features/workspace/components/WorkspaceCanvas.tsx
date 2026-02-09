@@ -154,6 +154,9 @@ function WorkspaceCanvasInner({
   const updateTaskStatusRef = useRef<(nodeId: string, status: TaskRuntimeStatus) => void>(
     () => undefined,
   )
+  const updateNodeScrollbackRef = useRef<(nodeId: string, scrollback: string) => void>(
+    () => undefined,
+  )
 
   useEffect(() => {
     nodesRef.current = nodes
@@ -161,7 +164,13 @@ function WorkspaceCanvasInner({
 
   const setNodes = useCallback(
     (updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[]) => {
-      const nextNodes = updater(nodesRef.current)
+      const previousNodes = nodesRef.current
+      const nextNodes = updater(previousNodes)
+
+      if (nextNodes === previousNodes) {
+        return
+      }
+
       nodesRef.current = nextNodes
       onNodesChange(nextNodes)
       window.dispatchEvent(new Event('cove:terminal-layout-sync'))
@@ -219,6 +228,39 @@ function WorkspaceCanvasInner({
     [upsertNode],
   )
 
+  const updateNodeScrollback = useCallback(
+    (nodeId: string, scrollback: string) => {
+      const normalized = scrollback.length > 0 ? scrollback : null
+
+      setNodes(prevNodes => {
+        let hasChanged = false
+
+        const nextNodes = prevNodes.map(node => {
+          if (node.id !== nodeId || node.data.kind === 'task') {
+            return node
+          }
+
+          if (node.data.scrollback === normalized) {
+            return node
+          }
+
+          hasChanged = true
+
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              scrollback: normalized,
+            },
+          }
+        })
+
+        return hasChanged ? nextNodes : prevNodes
+      })
+    },
+    [setNodes],
+  )
+
   const buildAgentNodeTitle = useCallback(
     (provider: AgentProvider, effectiveModel: string | null): string => {
       return `${providerTitlePrefix(provider)} · ${effectiveModel ?? 'default-model'}`
@@ -260,6 +302,7 @@ function WorkspaceCanvasInner({
           endedAt: null,
           exitCode: null,
           lastError: null,
+          scrollback: null,
           agent: kind === 'agent' ? (agent ?? null) : null,
           task: null,
         },
@@ -304,6 +347,7 @@ function WorkspaceCanvasInner({
           endedAt: null,
           exitCode: null,
           lastError: null,
+          scrollback: null,
           agent: null,
           task: {
             requirement,
@@ -416,6 +460,7 @@ function WorkspaceCanvasInner({
                 endedAt: null,
                 exitCode: null,
                 lastError: null,
+                scrollback: mode === 'new' ? null : item.data.scrollback,
                 agent: nextAgentData,
               },
             }
@@ -665,6 +710,12 @@ function WorkspaceCanvasInner({
   }, [updateTaskStatus])
 
   useEffect(() => {
+    updateNodeScrollbackRef.current = (nodeId, scrollback) => {
+      updateNodeScrollback(nodeId, scrollback)
+    }
+  }, [updateNodeScrollback])
+
+  useEffect(() => {
     const unsubscribeExit = window.coveApi.pty.onExit(event => {
       setNodes(prevNodes => {
         let relatedTaskNodeId: string | null = null
@@ -749,10 +800,12 @@ function WorkspaceCanvasInner({
           lastError={data.lastError}
           width={data.width}
           height={data.height}
+          scrollback={data.scrollback}
           onClose={() => {
             void closeNodeRef.current(id)
           }}
           onResize={size => resizeNodeRef.current(id, size)}
+          onScrollbackChange={scrollback => updateNodeScrollbackRef.current(id, scrollback)}
           onStop={
             data.kind === 'agent'
               ? () => {
