@@ -57,6 +57,11 @@ function getStatusClassName(status: AgentRuntimeStatus | null): string {
   }
 }
 
+interface SyncSizeOptions {
+  sendPtyResize: boolean
+  force?: boolean
+}
+
 export function TerminalNode({
   sessionId,
   title,
@@ -80,37 +85,114 @@ export function TerminalNode({
     width: number
     height: number
   } | null>(null)
+  const isPointerResizingRef = useRef(false)
+  const syncFrameRef = useRef<number | null>(null)
+  const lastViewportRef = useRef<{
+    width: number
+    height: number
+    cols: number
+    rows: number
+  }>({
+    width: 0,
+    height: 0,
+    cols: 0,
+    rows: 0,
+  })
+  const draftSizeRef = useRef<{ width: number; height: number } | null>(null)
 
   const [isResizing, setIsResizing] = useState(false)
-  const sizeStyle = useMemo(() => ({ width, height }), [width, height])
+  const [draftSize, setDraftSize] = useState<{ width: number; height: number } | null>(null)
 
-  const syncTerminalSize = useCallback(() => {
-    const terminal = terminalRef.current
-    const fitAddon = fitAddonRef.current
-    const container = containerRef.current
+  useEffect(() => {
+    draftSizeRef.current = draftSize
+  }, [draftSize])
 
-    if (!terminal || !fitAddon || !container) {
+  useEffect(() => {
+    if (!draftSize || isResizing) {
       return
     }
 
-    if (container.clientWidth <= 2 || container.clientHeight <= 2) {
-      return
+    if (draftSize.width === width && draftSize.height === height) {
+      setDraftSize(null)
     }
+  }, [draftSize, height, isResizing, width])
 
-    fitAddon.fit()
+  const renderedSize = draftSize ?? { width, height }
+  const sizeStyle = useMemo(
+    () => ({ width: renderedSize.width, height: renderedSize.height }),
+    [renderedSize.height, renderedSize.width],
+  )
 
-    if (terminal.cols <= 0 || terminal.rows <= 0) {
-      return
-    }
+  const syncTerminalSize = useCallback(
+    ({ sendPtyResize, force = false }: SyncSizeOptions) => {
+      const terminal = terminalRef.current
+      const fitAddon = fitAddonRef.current
+      const container = containerRef.current
 
-    terminal.refresh(0, Math.max(0, terminal.rows - 1))
+      if (!terminal || !fitAddon || !container) {
+        return
+      }
 
-    void window.coveApi.pty.resize({
-      sessionId,
-      cols: terminal.cols,
-      rows: terminal.rows,
-    })
-  }, [sessionId])
+      const viewportWidth = Math.round(container.clientWidth)
+      const viewportHeight = Math.round(container.clientHeight)
+
+      if (viewportWidth <= 2 || viewportHeight <= 2) {
+        return
+      }
+
+      const lastViewport = lastViewportRef.current
+      const viewportChanged =
+        viewportWidth !== lastViewport.width || viewportHeight !== lastViewport.height
+
+      if (!force && !viewportChanged && !sendPtyResize) {
+        return
+      }
+
+      fitAddon.fit()
+
+      if (terminal.cols <= 0 || terminal.rows <= 0) {
+        return
+      }
+
+      const gridChanged = terminal.cols !== lastViewport.cols || terminal.rows !== lastViewport.rows
+
+      if (force || viewportChanged || gridChanged) {
+        terminal.refresh(0, Math.max(0, terminal.rows - 1))
+      }
+
+      lastViewportRef.current = {
+        width: viewportWidth,
+        height: viewportHeight,
+        cols: terminal.cols,
+        rows: terminal.rows,
+      }
+
+      if (!sendPtyResize || (!gridChanged && !force)) {
+        return
+      }
+
+      void window.coveApi.pty.resize({
+        sessionId,
+        cols: terminal.cols,
+        rows: terminal.rows,
+      })
+    },
+    [sessionId],
+  )
+
+  const scheduleSyncTerminalSize = useCallback(
+    (options: SyncSizeOptions) => {
+      if (syncFrameRef.current !== null) {
+        cancelAnimationFrame(syncFrameRef.current)
+      }
+
+      syncFrameRef.current = requestAnimationFrame(() => {
+        syncFrameRef.current = null
+        syncTerminalSize(options)
+      })
+    },
+    [syncTerminalSize],
+  )
 
   useEffect(() => {
     const terminal = new Terminal({
@@ -132,10 +214,18 @@ export function TerminalNode({
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
+    lastViewportRef.current = {
+      width: 0,
+      height: 0,
+      cols: 0,
+      rows: 0,
+    }
 
     if (containerRef.current) {
       terminal.open(containerRef.current)
-      requestAnimationFrame(syncTerminalSize)
+      requestAnimationFrame(() => {
+        syncTerminalSize({ sendPtyResize: true, force: true })
+      })
     }
 
     const disposable = terminal.onData(data => {
@@ -179,13 +269,15 @@ export function TerminalNode({
       }
 
       bindSessionEvents()
-      syncTerminalSize()
+      syncTerminalSize({ sendPtyResize: true, force: true })
     }
 
     void hydrateFromSnapshot()
 
     const resizeObserver = new ResizeObserver(() => {
-      syncTerminalSize()
+      scheduleSyncTerminalSize({
+        sendPtyResize: !isPointerResizingRef.current,
+      })
     })
 
     if (containerRef.current) {
@@ -194,16 +286,16 @@ export function TerminalNode({
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        syncTerminalSize()
+        scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
       }
     }
 
     const handleWindowFocus = () => {
-      syncTerminalSize()
+      scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
     }
 
     const handleLayoutSync = () => {
-      syncTerminalSize()
+      scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -215,6 +307,10 @@ export function TerminalNode({
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleWindowFocus)
       window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync)
+      if (syncFrameRef.current !== null) {
+        cancelAnimationFrame(syncFrameRef.current)
+        syncFrameRef.current = null
+      }
       resizeObserver.disconnect()
       disposable.dispose()
       unsubscribeData?.()
@@ -223,14 +319,11 @@ export function TerminalNode({
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [sessionId, syncTerminalSize])
+  }, [scheduleSyncTerminalSize, sessionId, syncTerminalSize])
 
   useEffect(() => {
-    const frame = requestAnimationFrame(syncTerminalSize)
-    return () => {
-      cancelAnimationFrame(frame)
-    }
-  }, [height, syncTerminalSize, width])
+    scheduleSyncTerminalSize({ sendPtyResize: true })
+  }, [height, scheduleSyncTerminalSize, width])
 
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -245,6 +338,8 @@ export function TerminalNode({
         height,
       }
 
+      isPointerResizingRef.current = true
+      setDraftSize({ width, height })
       setIsResizing(true)
     },
     [height, width],
@@ -264,13 +359,22 @@ export function TerminalNode({
       const nextWidth = Math.max(MIN_WIDTH, Math.round(start.width + (event.clientX - start.x)))
       const nextHeight = Math.max(MIN_HEIGHT, Math.round(start.height + (event.clientY - start.y)))
 
-      onResize({ width: nextWidth, height: nextHeight })
+      setDraftSize({ width: nextWidth, height: nextHeight })
+
+      scheduleSyncTerminalSize({
+        sendPtyResize: false,
+      })
     }
 
     const handlePointerUp = () => {
       setIsResizing(false)
+      isPointerResizingRef.current = false
+
+      const finalSize = draftSizeRef.current ?? { width, height }
+      onResize(finalSize)
+
       resizeStartRef.current = null
-      syncTerminalSize()
+      scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
     }
 
     window.addEventListener('pointermove', handlePointerMove)
@@ -280,7 +384,7 @@ export function TerminalNode({
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [isResizing, onResize, syncTerminalSize])
+  }, [height, isResizing, onResize, scheduleSyncTerminalSize, width])
 
   const isAgentNode = kind === 'agent'
   const canStop =
