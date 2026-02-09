@@ -850,6 +850,7 @@ function WorkspaceCanvasInner({
           sessionId={data.sessionId}
           title={data.title}
           kind={data.kind}
+          agentProvider={data.agent?.provider ?? null}
           status={data.status}
           lastError={data.lastError}
           width={data.width}

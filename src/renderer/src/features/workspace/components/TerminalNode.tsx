@@ -3,12 +3,14 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
-import type { AgentRuntimeStatus, WorkspaceNodeKind } from '../types'
+import type { AgentNodeData, AgentRuntimeStatus, WorkspaceNodeKind } from '../types'
+import { resolveStablePtySize } from '../utils/terminalResize'
 
 interface TerminalNodeProps {
   sessionId: string
   title: string
   kind: WorkspaceNodeKind
+  agentProvider?: AgentNodeData['provider'] | null
   status: AgentRuntimeStatus | null
   lastError: string | null
   width: number
@@ -124,6 +126,7 @@ export function TerminalNode({
   sessionId,
   title,
   kind,
+  agentProvider,
   status,
   lastError,
   width,
@@ -147,6 +150,7 @@ export function TerminalNode({
     axis: ResizeAxis
   } | null>(null)
   const isPointerResizingRef = useRef(false)
+  const lastSyncedPtySizeRef = useRef<{ cols: number; rows: number } | null>(null)
 
   const publishTimerRef = useRef<number | null>(null)
   const latestScrollbackRef = useRef(truncateScrollback(scrollback ?? ''))
@@ -173,6 +177,10 @@ export function TerminalNode({
   }, [draftSize, height, isResizing, width])
 
   useEffect(() => {
+    lastSyncedPtySizeRef.current = null
+  }, [sessionId])
+
+  useEffect(() => {
     const normalized = truncateScrollback(scrollback ?? '')
     latestScrollbackRef.current = normalized
     publishedScrollbackRef.current = normalized
@@ -187,6 +195,8 @@ export function TerminalNode({
   useEffect(() => {
     onScrollbackChangeRef.current = onScrollbackChange
   }, [onScrollbackChange])
+
+  const shouldLockPtyRowShrink = kind === 'agent' && agentProvider === 'codex'
 
   const renderedSize = draftSize ?? { width, height }
   const sizeStyle = useMemo(
@@ -263,6 +273,10 @@ export function TerminalNode({
       return
     }
 
+    if (isPointerResizingRef.current) {
+      return
+    }
+
     fitAddon.fit()
 
     if (terminal.cols <= 0 || terminal.rows <= 0) {
@@ -271,12 +285,24 @@ export function TerminalNode({
 
     terminal.refresh(0, Math.max(0, terminal.rows - 1))
 
+    const nextPtySize = resolveStablePtySize({
+      previous: lastSyncedPtySizeRef.current,
+      measured: { cols: terminal.cols, rows: terminal.rows },
+      preventRowShrink: shouldLockPtyRowShrink,
+    })
+
+    if (!nextPtySize) {
+      return
+    }
+
+    lastSyncedPtySizeRef.current = nextPtySize
+
     void window.coveApi.pty.resize({
       sessionId,
-      cols: terminal.cols,
-      rows: terminal.rows,
+      cols: nextPtySize.cols,
+      rows: nextPtySize.rows,
     })
-  }, [sessionId])
+  }, [sessionId, shouldLockPtyRowShrink])
 
   useEffect(() => {
     const terminal = new Terminal({
