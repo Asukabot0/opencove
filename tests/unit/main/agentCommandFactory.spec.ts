@@ -13,9 +13,7 @@ describe('buildAgentLaunchCommand', () => {
 
     expect(command.command).toBe('codex')
     expect(command.args).toEqual([
-      'exec',
       '--full-auto',
-      '--skip-git-repo-check',
       '--model',
       'gpt-5.2-codex',
       'implement login flow',
@@ -50,10 +48,8 @@ describe('buildAgentLaunchCommand', () => {
 
     expect(command.command).toBe('codex')
     expect(command.args).toEqual([
-      'exec',
       'resume',
       '019c3e32-52ff-7b00-94ac-e6c5a56b4aa4',
-      '--skip-git-repo-check',
       '--model',
       'gpt-5.2-codex',
     ])

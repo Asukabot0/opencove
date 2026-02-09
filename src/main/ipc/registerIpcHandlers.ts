@@ -189,9 +189,36 @@ function normalizeSuggestTaskTitlePayload(payload: unknown): SuggestTaskTitleInp
 
 export function registerIpcHandlers(): IpcRegistrationDisposable {
   const ptyManager = new PtyManager()
+  const terminalProbeBufferBySession = new Map<string, string>()
+
+  const resolveTerminalProbeReplies = (sessionId: string, outputChunk: string): void => {
+    if (outputChunk.includes('\u001b[6n')) {
+      ptyManager.write(sessionId, '\u001b[1;1R')
+    }
+
+    if (outputChunk.includes('\u001b[?6n')) {
+      ptyManager.write(sessionId, '\u001b[?1;1R')
+    }
+
+    if (outputChunk.includes('\u001b[c')) {
+      ptyManager.write(sessionId, '\u001b[?1;2c')
+    }
+
+    if (outputChunk.includes('\u001b[>c')) {
+      ptyManager.write(sessionId, '\u001b[>0;115;0c')
+    }
+
+    if (outputChunk.includes('\u001b[?u')) {
+      ptyManager.write(sessionId, '\u001b[?0u')
+    }
+  }
 
   const wirePtySessionEvents = (sessionId: string, pty: IPty): void => {
     pty.onData(data => {
+      const probeBuffer = `${terminalProbeBufferBySession.get(sessionId) ?? ''}${data}`
+      resolveTerminalProbeReplies(sessionId, probeBuffer)
+      terminalProbeBufferBySession.set(sessionId, probeBuffer.slice(-32))
+
       ptyManager.appendSnapshotData(sessionId, data)
 
       webContents.getAllWebContents().forEach(content => {
@@ -201,6 +228,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     })
 
     pty.onExit(exit => {
+      terminalProbeBufferBySession.delete(sessionId)
       ptyManager.delete(sessionId)
       webContents.getAllWebContents().forEach(content => {
         const eventPayload: TerminalExitEvent = {
@@ -268,6 +296,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   })
 
   ipcMain.handle(IPC_CHANNELS.ptyKill, async (_event, payload: KillTerminalInput) => {
+    terminalProbeBufferBySession.delete(payload.sessionId)
     ptyManager.kill(payload.sessionId)
   })
 
