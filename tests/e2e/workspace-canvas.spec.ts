@@ -99,7 +99,7 @@ async function seedWorkspaceState(
     await window.reload({ waitUntil: 'domcontentloaded' })
 
     const seededReady = await window.evaluate(
-      ({ key, workspaceIds }) => {
+      ({ key, expectedWorkspaces }) => {
         const raw = window.localStorage.getItem(key)
         if (!raw) {
           return false
@@ -109,6 +109,9 @@ async function seedWorkspaceState(
           const parsed = JSON.parse(raw) as {
             workspaces?: Array<{
               id?: string
+              nodes?: Array<{
+                id?: string
+              }>
             }>
           }
 
@@ -116,20 +119,38 @@ async function seedWorkspaceState(
             return false
           }
 
-          const loadedIds = new Set(
+          const workspaceById = new Map(
             parsed.workspaces
-              .map(workspace => (typeof workspace.id === 'string' ? workspace.id : ''))
-              .filter(id => id.length > 0),
+              .filter(workspace => typeof workspace.id === 'string')
+              .map(workspace => [workspace.id as string, workspace]),
           )
 
-          return workspaceIds.every(workspaceId => loadedIds.has(workspaceId))
+          return expectedWorkspaces.every(expectedWorkspace => {
+            const loadedWorkspace = workspaceById.get(expectedWorkspace.id)
+            if (!loadedWorkspace || !Array.isArray(loadedWorkspace.nodes)) {
+              return false
+            }
+
+            const loadedNodeIds = loadedWorkspace.nodes
+              .map(node => (typeof node.id === 'string' ? node.id : ''))
+              .filter(id => id.length > 0)
+
+            if (loadedNodeIds.length !== expectedWorkspace.nodeIds.length) {
+              return false
+            }
+
+            return expectedWorkspace.nodeIds.every(nodeId => loadedNodeIds.includes(nodeId))
+          })
         } catch {
           return false
         }
       },
       {
         key: storageKey,
-        workspaceIds: payload.workspaces.map(workspace => workspace.id),
+        expectedWorkspaces: payload.workspaces.map(workspace => ({
+          id: workspace.id,
+          nodeIds: workspace.nodes.map(node => node.id),
+        })),
       },
     )
 
@@ -254,6 +275,60 @@ test.describe('Workspace Canvas Interactions', () => {
 
       await expect(firstTerminal).toBeVisible()
       await expect(firstTerminal.locator('.xterm')).toBeVisible()
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('keeps agent tui visible while dragging window', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [
+        {
+          id: 'node-agent-drag',
+          title: 'codex · gpt-5.2-codex',
+          position: { x: 120, y: 120 },
+          width: 520,
+          height: 320,
+          kind: 'agent',
+          status: 'running',
+          startedAt: '2026-02-09T00:00:00.000Z',
+          endedAt: null,
+          exitCode: null,
+          lastError: null,
+          agent: {
+            provider: 'codex',
+            prompt: 'Keep tui stable during drag',
+            model: 'gpt-5.2-codex',
+            effectiveModel: 'gpt-5.2-codex',
+            launchMode: 'resume',
+            resumeSessionId: '019c3e32-52ff-7b00-94ac-e6c5a56b4aa4',
+            executionDirectory: testWorkspacePath,
+            directoryMode: 'workspace',
+            customDirectory: null,
+            shouldCreateDirectory: false,
+          },
+        },
+      ])
+
+      const agentNode = window.locator('.terminal-node').first()
+      await expect(agentNode).toBeVisible()
+      await expect(agentNode.locator('.xterm')).toBeVisible()
+      await expect(agentNode).toContainText('[cove-test-agent]')
+
+      const header = agentNode.locator('.terminal-node__header')
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+
+      await header.dragTo(pane, {
+        sourcePosition: { x: 120, y: 16 },
+        targetPosition: { x: 680, y: 420 },
+      })
+
+      await expect(agentNode).toBeVisible()
+      await expect(agentNode.locator('.xterm')).toBeVisible()
+      await expect(agentNode).toContainText('[cove-test-agent]')
     } finally {
       await electronApp.close()
     }

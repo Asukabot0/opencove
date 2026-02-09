@@ -157,13 +157,18 @@ function WorkspaceCanvasInner({
   const updateNodeScrollbackRef = useRef<(nodeId: string, scrollback: string) => void>(
     () => undefined,
   )
+  const isNodeDraggingRef = useRef(false)
+  const pendingScrollbackByNodeRef = useRef<Map<string, string>>(new Map())
 
   useEffect(() => {
     nodesRef.current = nodes
   }, [nodes])
 
   const setNodes = useCallback(
-    (updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[]) => {
+    (
+      updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
+      options: { syncLayout?: boolean } = {},
+    ) => {
       const previousNodes = nodesRef.current
       const nextNodes = updater(previousNodes)
 
@@ -173,7 +178,10 @@ function WorkspaceCanvasInner({
 
       nodesRef.current = nextNodes
       onNodesChange(nextNodes)
-      window.dispatchEvent(new Event('cove:terminal-layout-sync'))
+
+      if (options.syncLayout ?? true) {
+        window.dispatchEvent(new Event('cove:terminal-layout-sync'))
+      }
     },
     [onNodesChange],
   )
@@ -228,35 +236,81 @@ function WorkspaceCanvasInner({
     [upsertNode],
   )
 
+  const applyPendingScrollbacks = useCallback((targetNodes: Node<TerminalNodeData>[]) => {
+    const pendingScrollbacks = pendingScrollbackByNodeRef.current
+    if (pendingScrollbacks.size === 0) {
+      return targetNodes
+    }
+
+    let hasChanged = false
+
+    const nextNodes = targetNodes.map(node => {
+      if (node.data.kind === 'task') {
+        return node
+      }
+
+      const pending = pendingScrollbacks.get(node.id)
+      if (pending === undefined) {
+        return node
+      }
+
+      const normalized = pending.length > 0 ? pending : null
+      if (node.data.scrollback === normalized) {
+        return node
+      }
+
+      hasChanged = true
+
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          scrollback: normalized,
+        },
+      }
+    })
+
+    pendingScrollbacks.clear()
+    return hasChanged ? nextNodes : targetNodes
+  }, [])
+
   const updateNodeScrollback = useCallback(
     (nodeId: string, scrollback: string) => {
+      if (isNodeDraggingRef.current) {
+        pendingScrollbackByNodeRef.current.set(nodeId, scrollback)
+        return
+      }
+
       const normalized = scrollback.length > 0 ? scrollback : null
 
-      setNodes(prevNodes => {
-        let hasChanged = false
+      setNodes(
+        prevNodes => {
+          let hasChanged = false
 
-        const nextNodes = prevNodes.map(node => {
-          if (node.id !== nodeId || node.data.kind === 'task') {
-            return node
-          }
+          const nextNodes = prevNodes.map(node => {
+            if (node.id !== nodeId || node.data.kind === 'task') {
+              return node
+            }
 
-          if (node.data.scrollback === normalized) {
-            return node
-          }
+            if (node.data.scrollback === normalized) {
+              return node
+            }
 
-          hasChanged = true
+            hasChanged = true
 
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              scrollback: normalized,
-            },
-          }
-        })
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                scrollback: normalized,
+              },
+            }
+          })
 
-        return hasChanged ? nextNodes : prevNodes
-      })
+          return hasChanged ? nextNodes : prevNodes
+        },
+        { syncLayout: false },
+      )
     },
     [setNodes],
   )
@@ -1271,6 +1325,15 @@ function WorkspaceCanvasInner({
         })
       }
 
+      const positionChanges = changes.filter(change => change.type === 'position')
+      if (positionChanges.length > 0) {
+        isNodeDraggingRef.current = positionChanges.some(change => change.dragging)
+      }
+
+      if (!isNodeDraggingRef.current) {
+        nextNodes = applyPendingScrollbacks(nextNodes)
+      }
+
       const shouldSyncLayout = changes.some(change => {
         if (change.type === 'remove') {
           return true
@@ -1289,7 +1352,7 @@ function WorkspaceCanvasInner({
         window.dispatchEvent(new Event('cove:terminal-layout-sync'))
       }
     },
-    [normalizePosition, onNodesChange],
+    [applyPendingScrollbacks, normalizePosition, onNodesChange],
   )
 
   const launcherModelOptions = useMemo(() => {
