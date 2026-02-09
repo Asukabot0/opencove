@@ -22,11 +22,12 @@ interface TerminalNodeProps {
   onResume?: () => void
 }
 
+type ResizeAxis = 'horizontal' | 'vertical'
+
 const MIN_WIDTH = 320
 const MIN_HEIGHT = 220
 const MAX_SCROLLBACK_CHARS = 200_000
 const SCROLLBACK_PUBLISH_DELAY_MS = 800
-const RESIZE_SCROLLBACK_SETTLE_MS = 900
 const MAX_OVERLAP_PROBE_CHARS = 4096
 const TERMINAL_LAYOUT_SYNC_EVENT = 'cove:terminal-layout-sync'
 
@@ -119,13 +120,6 @@ function getStatusClassName(status: AgentRuntimeStatus | null): string {
   }
 }
 
-type ResizeAxis = 'horizontal' | 'vertical'
-
-interface SyncSizeOptions {
-  sendPtyResize: boolean
-  force?: boolean
-}
-
 export function TerminalNode({
   sessionId,
   title,
@@ -153,27 +147,14 @@ export function TerminalNode({
     axis: ResizeAxis
   } | null>(null)
   const isPointerResizingRef = useRef(false)
-  const syncFrameRef = useRef<number | null>(null)
-  const lastViewportRef = useRef<{
-    width: number
-    height: number
-    cols: number
-    rows: number
-  }>({
-    width: 0,
-    height: 0,
-    cols: 0,
-    rows: 0,
-  })
-  const draftSizeRef = useRef<{ width: number; height: number } | null>(null)
+
   const publishTimerRef = useRef<number | null>(null)
-  const resizeScrollbackSettleTimerRef = useRef<number | null>(null)
-  const suppressScrollbackPublishUntilRef = useRef<number>(0)
   const latestScrollbackRef = useRef(truncateScrollback(scrollback ?? ''))
   const publishedScrollbackRef = useRef(truncateScrollback(scrollback ?? ''))
   const pendingPublishedScrollbackRef = useRef<string | null>(null)
   const onScrollbackChangeRef = useRef<TerminalNodeProps['onScrollbackChange']>(onScrollbackChange)
 
+  const draftSizeRef = useRef<{ width: number; height: number } | null>(null)
   const [isResizing, setIsResizing] = useState(false)
   const [draftSize, setDraftSize] = useState<{ width: number; height: number } | null>(null)
 
@@ -196,16 +177,10 @@ export function TerminalNode({
     latestScrollbackRef.current = normalized
     publishedScrollbackRef.current = normalized
     pendingPublishedScrollbackRef.current = null
-    suppressScrollbackPublishUntilRef.current = 0
 
     if (publishTimerRef.current !== null) {
       window.clearTimeout(publishTimerRef.current)
       publishTimerRef.current = null
-    }
-
-    if (resizeScrollbackSettleTimerRef.current !== null) {
-      window.clearTimeout(resizeScrollbackSettleTimerRef.current)
-      resizeScrollbackSettleTimerRef.current = null
     }
   }, [scrollback, sessionId])
 
@@ -238,22 +213,10 @@ export function TerminalNode({
 
   const scheduleScrollbackPublish = useCallback(
     (immediate = false) => {
-      const now = Date.now()
-      const suppressUntil = suppressScrollbackPublishUntilRef.current
-      const suppressDelay = Math.max(0, suppressUntil - now)
-
       if (immediate) {
         if (publishTimerRef.current !== null) {
           window.clearTimeout(publishTimerRef.current)
           publishTimerRef.current = null
-        }
-
-        if (suppressDelay > 0) {
-          publishTimerRef.current = window.setTimeout(() => {
-            publishTimerRef.current = null
-            flushScrollback()
-          }, suppressDelay)
-          return
         }
 
         flushScrollback()
@@ -264,11 +227,10 @@ export function TerminalNode({
         return
       }
 
-      const delay = Math.max(SCROLLBACK_PUBLISH_DELAY_MS, suppressDelay)
       publishTimerRef.current = window.setTimeout(() => {
         publishTimerRef.current = null
         flushScrollback()
-      }, delay)
+      }, SCROLLBACK_PUBLISH_DELAY_MS)
     },
     [flushScrollback],
   )
@@ -288,76 +250,33 @@ export function TerminalNode({
     [scheduleScrollbackPublish],
   )
 
-  const syncTerminalSize = useCallback(
-    ({ sendPtyResize, force = false }: SyncSizeOptions) => {
-      const terminal = terminalRef.current
-      const fitAddon = fitAddonRef.current
-      const container = containerRef.current
+  const syncTerminalSize = useCallback(() => {
+    const terminal = terminalRef.current
+    const fitAddon = fitAddonRef.current
+    const container = containerRef.current
 
-      if (!terminal || !fitAddon || !container) {
-        return
-      }
+    if (!terminal || !fitAddon || !container) {
+      return
+    }
 
-      const viewportWidth = Math.round(container.clientWidth)
-      const viewportHeight = Math.round(container.clientHeight)
+    if (container.clientWidth <= 2 || container.clientHeight <= 2) {
+      return
+    }
 
-      if (viewportWidth <= 2 || viewportHeight <= 2) {
-        return
-      }
+    fitAddon.fit()
 
-      const lastViewport = lastViewportRef.current
-      const viewportChanged =
-        viewportWidth !== lastViewport.width || viewportHeight !== lastViewport.height
+    if (terminal.cols <= 0 || terminal.rows <= 0) {
+      return
+    }
 
-      if (!force && !viewportChanged && !sendPtyResize) {
-        return
-      }
+    terminal.refresh(0, Math.max(0, terminal.rows - 1))
 
-      fitAddon.fit()
-
-      if (terminal.cols <= 0 || terminal.rows <= 0) {
-        return
-      }
-
-      const gridChanged = terminal.cols !== lastViewport.cols || terminal.rows !== lastViewport.rows
-
-      if (force || viewportChanged || gridChanged) {
-        terminal.refresh(0, Math.max(0, terminal.rows - 1))
-      }
-
-      lastViewportRef.current = {
-        width: viewportWidth,
-        height: viewportHeight,
-        cols: terminal.cols,
-        rows: terminal.rows,
-      }
-
-      if (!sendPtyResize || (!gridChanged && !force)) {
-        return
-      }
-
-      void window.coveApi.pty.resize({
-        sessionId,
-        cols: terminal.cols,
-        rows: terminal.rows,
-      })
-    },
-    [sessionId],
-  )
-
-  const scheduleSyncTerminalSize = useCallback(
-    (options: SyncSizeOptions) => {
-      if (syncFrameRef.current !== null) {
-        cancelAnimationFrame(syncFrameRef.current)
-      }
-
-      syncFrameRef.current = requestAnimationFrame(() => {
-        syncFrameRef.current = null
-        syncTerminalSize(options)
-      })
-    },
-    [syncTerminalSize],
-  )
+    void window.coveApi.pty.resize({
+      sessionId,
+      cols: terminal.cols,
+      rows: terminal.rows,
+    })
+  }, [sessionId])
 
   useEffect(() => {
     const terminal = new Terminal({
@@ -379,18 +298,10 @@ export function TerminalNode({
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
-    lastViewportRef.current = {
-      width: 0,
-      height: 0,
-      cols: 0,
-      rows: 0,
-    }
 
     if (containerRef.current) {
       terminal.open(containerRef.current)
-      requestAnimationFrame(() => {
-        syncTerminalSize({ sendPtyResize: true, force: true })
-      })
+      requestAnimationFrame(syncTerminalSize)
     }
 
     const disposable = terminal.onData(data => {
@@ -446,15 +357,13 @@ export function TerminalNode({
 
       updateScrollback(mergedSnapshot, true)
       bindSessionEvents()
-      syncTerminalSize({ sendPtyResize: true, force: true })
+      syncTerminalSize()
     }
 
     void hydrateFromSnapshot()
 
     const resizeObserver = new ResizeObserver(() => {
-      scheduleSyncTerminalSize({
-        sendPtyResize: !isPointerResizingRef.current,
-      })
+      syncTerminalSize()
     })
 
     if (containerRef.current) {
@@ -463,16 +372,16 @@ export function TerminalNode({
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
+        syncTerminalSize()
       }
     }
 
     const handleWindowFocus = () => {
-      scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
+      syncTerminalSize()
     }
 
     const handleLayoutSync = () => {
-      scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
+      syncTerminalSize()
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -484,19 +393,10 @@ export function TerminalNode({
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleWindowFocus)
       window.removeEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync)
-      if (syncFrameRef.current !== null) {
-        cancelAnimationFrame(syncFrameRef.current)
-        syncFrameRef.current = null
-      }
       resizeObserver.disconnect()
       disposable.dispose()
       unsubscribeData?.()
       unsubscribeExit?.()
-      if (resizeScrollbackSettleTimerRef.current !== null) {
-        window.clearTimeout(resizeScrollbackSettleTimerRef.current)
-        resizeScrollbackSettleTimerRef.current = null
-      }
-      suppressScrollbackPublishUntilRef.current = 0
       scheduleScrollbackPublish(true)
       if (publishTimerRef.current !== null) {
         window.clearTimeout(publishTimerRef.current)
@@ -506,17 +406,14 @@ export function TerminalNode({
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [
-    scheduleScrollbackPublish,
-    scheduleSyncTerminalSize,
-    sessionId,
-    syncTerminalSize,
-    updateScrollback,
-  ])
+  }, [scheduleScrollbackPublish, sessionId, syncTerminalSize, updateScrollback])
 
   useEffect(() => {
-    scheduleSyncTerminalSize({ sendPtyResize: true })
-  }, [height, scheduleSyncTerminalSize, width])
+    const frame = requestAnimationFrame(syncTerminalSize)
+    return () => {
+      cancelAnimationFrame(frame)
+    }
+  }, [height, syncTerminalSize, width])
 
   const handleResizePointerDown = useCallback(
     (axis: ResizeAxis) => (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -532,12 +429,6 @@ export function TerminalNode({
         axis,
       }
 
-      if (resizeScrollbackSettleTimerRef.current !== null) {
-        window.clearTimeout(resizeScrollbackSettleTimerRef.current)
-        resizeScrollbackSettleTimerRef.current = null
-      }
-
-      suppressScrollbackPublishUntilRef.current = 0
       isPointerResizingRef.current = true
       setDraftSize({ width, height })
       setIsResizing(true)
@@ -573,22 +464,10 @@ export function TerminalNode({
       const finalSize = draftSizeRef.current ?? { width, height }
       onResize(finalSize)
 
-      const settleAt = Date.now() + RESIZE_SCROLLBACK_SETTLE_MS
-      suppressScrollbackPublishUntilRef.current = settleAt
-
-      if (resizeScrollbackSettleTimerRef.current !== null) {
-        window.clearTimeout(resizeScrollbackSettleTimerRef.current)
-      }
-
-      resizeScrollbackSettleTimerRef.current = window.setTimeout(() => {
-        resizeScrollbackSettleTimerRef.current = null
-        suppressScrollbackPublishUntilRef.current = 0
-        scheduleScrollbackPublish(true)
-      }, RESIZE_SCROLLBACK_SETTLE_MS)
-
       resizeStartRef.current = null
       requestAnimationFrame(() => {
-        scheduleSyncTerminalSize({ sendPtyResize: true, force: true })
+        syncTerminalSize()
+        scheduleScrollbackPublish(true)
       })
     }
 
@@ -599,7 +478,7 @@ export function TerminalNode({
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [height, isResizing, onResize, scheduleScrollbackPublish, scheduleSyncTerminalSize, width])
+  }, [height, isResizing, onResize, scheduleScrollbackPublish, syncTerminalSize, width])
 
   const isAgentNode = kind === 'agent'
   const canStop =
