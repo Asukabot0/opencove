@@ -26,6 +26,7 @@ import {
 } from '../types'
 
 const STORAGE_KEY = 'cove:m0:workspace-state'
+const DEFAULT_PERSIST_WRITE_DEBOUNCE_MS = 800
 
 const AGENT_RUNTIME_STATUSES: AgentRuntimeStatus[] = [
   'running',
@@ -46,7 +47,11 @@ function getStorage(): Storage | null {
     return null
   }
 
-  return window.localStorage ?? null
+  try {
+    return window.localStorage ?? null
+  } catch {
+    return null
+  }
 }
 
 function normalizeOptionalString(value: unknown): string | null {
@@ -469,7 +474,11 @@ export function writePersistedState(state: PersistedAppState): void {
     return
   }
 
-  storage.setItem(STORAGE_KEY, JSON.stringify(state))
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(state))
+  } catch {
+    // Ignore persistence failures (quota exceeded, storage disabled, etc.)
+  }
 }
 
 export function writeRawPersistedState(raw: string): void {
@@ -478,7 +487,51 @@ export function writeRawPersistedState(raw: string): void {
     return
   }
 
-  storage.setItem(STORAGE_KEY, raw)
+  try {
+    storage.setItem(STORAGE_KEY, raw)
+  } catch {
+    // Ignore persistence failures (quota exceeded, storage disabled, etc.)
+  }
+}
+
+let scheduledPersistedStateProducer: (() => PersistedAppState) | null = null
+let scheduledPersistedStateTimer: number | null = null
+
+export function schedulePersistedStateWrite(
+  producer: () => PersistedAppState,
+  options: { delayMs?: number } = {},
+): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  scheduledPersistedStateProducer = producer
+
+  if (scheduledPersistedStateTimer !== null) {
+    return
+  }
+
+  const delayMs = options.delayMs ?? DEFAULT_PERSIST_WRITE_DEBOUNCE_MS
+  scheduledPersistedStateTimer = window.setTimeout(() => {
+    scheduledPersistedStateTimer = null
+    flushScheduledPersistedStateWrite()
+  }, delayMs)
+}
+
+export function flushScheduledPersistedStateWrite(): void {
+  if (typeof window !== 'undefined' && scheduledPersistedStateTimer !== null) {
+    window.clearTimeout(scheduledPersistedStateTimer)
+    scheduledPersistedStateTimer = null
+  }
+
+  const producer = scheduledPersistedStateProducer
+  scheduledPersistedStateProducer = null
+
+  if (!producer) {
+    return
+  }
+
+  writePersistedState(producer())
 }
 
 export function toPersistedState(

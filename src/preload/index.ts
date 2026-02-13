@@ -25,6 +25,9 @@ type UnsubscribeFn = () => void
 
 // Custom APIs for renderer
 const coveApi = {
+  meta: {
+    isTest: process.env.NODE_ENV === 'test',
+  },
   workspace: {
     selectDirectory: (): Promise<WorkspaceDirectory | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.workspaceSelectDirectory),

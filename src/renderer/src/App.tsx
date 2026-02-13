@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SettingsPanel } from './features/settings/components/SettingsPanel'
 import {
   AGENT_PROVIDERS,
@@ -21,11 +21,13 @@ import {
   DEFAULT_WORKSPACE_VIEWPORT,
 } from './features/workspace/types'
 import {
+  flushScheduledPersistedStateWrite,
   readPersistedState,
+  schedulePersistedStateWrite,
   toPersistedState,
-  writePersistedState,
 } from './features/workspace/utils/persistence'
 import { toRuntimeNodes } from './features/workspace/utils/nodeTransform'
+import { createLatestOnlyRequestStore } from './utils/latestOnly'
 
 interface ProviderModelCatalogEntry {
   models: string[]
@@ -174,6 +176,46 @@ function App(): React.JSX.Element {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isHydrated, setIsHydrated] = useState(false)
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
+
+  const workspacesRef = useRef(workspaces)
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId)
+  const agentSettingsRef = useRef(agentSettings)
+  const providerModelsRequestStoreRef = useRef(createLatestOnlyRequestStore<AgentProvider>())
+  const persistFlushRequestedRef = useRef(false)
+
+  workspacesRef.current = workspaces
+  activeWorkspaceIdRef.current = activeWorkspaceId
+  agentSettingsRef.current = agentSettings
+
+  const producePersistedState = useCallback(
+    () =>
+      toPersistedState(
+        workspacesRef.current,
+        activeWorkspaceIdRef.current,
+        agentSettingsRef.current,
+      ),
+    [],
+  )
+
+  const requestPersistFlush = useCallback(() => {
+    persistFlushRequestedRef.current = true
+  }, [])
+
+  useEffect(() => {
+    if (window.coveApi.meta.isTest) {
+      return
+    }
+
+    const handleBeforeUnload = () => {
+      flushScheduledPersistedStateWrite()
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      flushScheduledPersistedStateWrite()
+    }
+  }, [])
 
   useEffect(() => {
     const persisted = readPersistedState()
@@ -425,10 +467,17 @@ function App(): React.JSX.Element {
       return
     }
 
-    writePersistedState(toPersistedState(workspaces, activeWorkspaceId, agentSettings))
-  }, [activeWorkspaceId, agentSettings, isHydrated, workspaces])
+    schedulePersistedStateWrite(producePersistedState)
+
+    if (persistFlushRequestedRef.current) {
+      persistFlushRequestedRef.current = false
+      flushScheduledPersistedStateWrite()
+    }
+  }, [activeWorkspaceId, agentSettings, isHydrated, producePersistedState, workspaces])
 
   const refreshProviderModels = useCallback(async (provider: AgentProvider): Promise<void> => {
+    const requestToken = providerModelsRequestStoreRef.current.start(provider)
+
     setProviderModelCatalog(prev => ({
       ...prev,
       [provider]: {
@@ -440,6 +489,11 @@ function App(): React.JSX.Element {
 
     try {
       const result = await window.coveApi.agent.listModels({ provider })
+
+      if (!providerModelsRequestStoreRef.current.isLatest(provider, requestToken)) {
+        return
+      }
+
       const nextModels = [...new Set(result.models.map(model => model.id))]
 
       setProviderModelCatalog(prev => ({
@@ -454,6 +508,10 @@ function App(): React.JSX.Element {
         },
       }))
     } catch (error) {
+      if (!providerModelsRequestStoreRef.current.isLatest(provider, requestToken)) {
+        return
+      }
+
       setProviderModelCatalog(prev => ({
         ...prev,
         [provider]: {
@@ -845,6 +903,7 @@ function App(): React.JSX.Element {
               workspacePath={activeWorkspace.path}
               nodes={activeWorkspace.nodes}
               onNodesChange={handleWorkspaceNodesChange}
+              onRequestPersistFlush={requestPersistFlush}
               viewport={activeWorkspace.viewport}
               isMinimapVisible={activeWorkspace.isMinimapVisible}
               onViewportChange={handleWorkspaceViewportChange}
@@ -889,6 +948,8 @@ function App(): React.JSX.Element {
           }}
           onClose={() => {
             setIsSettingsOpen(false)
+            schedulePersistedStateWrite(producePersistedState, { delayMs: 0 })
+            flushScheduledPersistedStateWrite()
           }}
         />
       ) : null}

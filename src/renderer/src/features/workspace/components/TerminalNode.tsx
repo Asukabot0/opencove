@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import type { AgentNodeData, AgentRuntimeStatus, WorkspaceNodeKind } from '../types'
+import { createRollingTextBuffer } from '../utils/rollingTextBuffer'
 import { resolveStablePtySize } from '../utils/terminalResize'
 
 interface TerminalNodeProps {
@@ -41,14 +42,6 @@ function truncateScrollback(snapshot: string): string {
   }
 
   return snapshot.slice(-MAX_SCROLLBACK_CHARS)
-}
-
-function appendScrollback(previous: string, chunk: string): string {
-  if (chunk.length === 0) {
-    return previous
-  }
-
-  return truncateScrollback(`${previous}${chunk}`)
 }
 
 function calculateSuffixPrefixOverlap(left: string, right: string): number {
@@ -156,9 +149,14 @@ export function TerminalNode({
   const lastSyncedPtySizeRef = useRef<{ cols: number; rows: number } | null>(null)
 
   const publishTimerRef = useRef<number | null>(null)
-  const latestScrollbackRef = useRef(truncateScrollback(scrollback ?? ''))
+  const scrollbackBufferRef = useRef(
+    createRollingTextBuffer({
+      maxChars: MAX_SCROLLBACK_CHARS,
+      initial: truncateScrollback(scrollback ?? ''),
+    }),
+  )
   const publishedScrollbackRef = useRef(truncateScrollback(scrollback ?? ''))
-  const pendingPublishedScrollbackRef = useRef<string | null>(null)
+  const hasPendingScrollbackRef = useRef(false)
   const onScrollbackChangeRef = useRef<TerminalNodeProps['onScrollbackChange']>(onScrollbackChange)
 
   const draftSizeRef = useRef<{ width: number; height: number } | null>(null)
@@ -185,9 +183,9 @@ export function TerminalNode({
 
   useEffect(() => {
     const normalized = truncateScrollback(scrollback ?? '')
-    latestScrollbackRef.current = normalized
+    scrollbackBufferRef.current.set(normalized)
     publishedScrollbackRef.current = normalized
-    pendingPublishedScrollbackRef.current = null
+    hasPendingScrollbackRef.current = false
 
     if (publishTimerRef.current !== null) {
       window.clearTimeout(publishTimerRef.current)
@@ -210,16 +208,20 @@ export function TerminalNode({
   const flushScrollback = useCallback(() => {
     const onScrollbackChangeFn = onScrollbackChangeRef.current
     if (!onScrollbackChangeFn) {
-      pendingPublishedScrollbackRef.current = null
+      hasPendingScrollbackRef.current = false
       return
     }
 
-    const pending = pendingPublishedScrollbackRef.current
-    if (pending === null || pending === publishedScrollbackRef.current) {
+    if (!hasPendingScrollbackRef.current) {
       return
     }
 
-    pendingPublishedScrollbackRef.current = null
+    hasPendingScrollbackRef.current = false
+    const pending = scrollbackBufferRef.current.snapshot()
+    if (pending === publishedScrollbackRef.current) {
+      return
+    }
+
     publishedScrollbackRef.current = pending
     onScrollbackChangeFn(pending)
   }, [])
@@ -248,11 +250,9 @@ export function TerminalNode({
     [flushScrollback],
   )
 
-  const updateScrollback = useCallback(
-    (nextSnapshot: string, immediate = false) => {
-      const normalized = truncateScrollback(nextSnapshot)
-      latestScrollbackRef.current = normalized
-      pendingPublishedScrollbackRef.current = normalized
+  const markScrollbackDirty = useCallback(
+    (immediate = false) => {
+      hasPendingScrollbackRef.current = true
 
       if (isPointerResizingRef.current) {
         return
@@ -348,9 +348,8 @@ export function TerminalNode({
         }
 
         terminal.write(event.data)
-
-        const nextSnapshot = appendScrollback(latestScrollbackRef.current, event.data)
-        updateScrollback(nextSnapshot)
+        scrollbackBufferRef.current.append(event.data)
+        markScrollbackDirty()
       })
 
       unsubscribeExit = window.coveApi.pty.onExit(event => {
@@ -360,18 +359,18 @@ export function TerminalNode({
 
         const exitMessage = `\r\n[process exited with code ${event.exitCode}]\r\n`
         terminal.write(exitMessage)
-
-        const nextSnapshot = appendScrollback(latestScrollbackRef.current, exitMessage)
-        updateScrollback(nextSnapshot, true)
+        scrollbackBufferRef.current.append(exitMessage)
+        markScrollbackDirty(true)
       })
     }
 
     const hydrateFromSnapshot = async () => {
-      let mergedSnapshot = latestScrollbackRef.current
+      const persistedSnapshot = scrollbackBufferRef.current.snapshot()
+      let mergedSnapshot = persistedSnapshot
 
       try {
         const snapshot = await window.coveApi.pty.snapshot({ sessionId })
-        mergedSnapshot = mergeScrollbackSnapshots(latestScrollbackRef.current, snapshot.data)
+        mergedSnapshot = mergeScrollbackSnapshots(persistedSnapshot, snapshot.data)
       } catch {
         // ignore snapshot read failures and continue with available persisted history
       }
@@ -384,7 +383,8 @@ export function TerminalNode({
         terminal.write(mergedSnapshot)
       }
 
-      updateScrollback(mergedSnapshot, true)
+      scrollbackBufferRef.current.set(mergedSnapshot)
+      markScrollbackDirty(true)
       bindSessionEvents()
       syncTerminalSize()
     }
@@ -435,7 +435,7 @@ export function TerminalNode({
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [scheduleScrollbackPublish, sessionId, syncTerminalSize, updateScrollback])
+  }, [markScrollbackDirty, scheduleScrollbackPublish, sessionId, syncTerminalSize])
 
   useEffect(() => {
     const frame = requestAnimationFrame(syncTerminalSize)

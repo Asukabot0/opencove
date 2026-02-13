@@ -229,6 +229,80 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   const isTerminalAttachedBySession = new Map<string, boolean>()
   const doneWatcherBySession = new Map<string, SessionDoneWatcher>()
   const doneWatcherVersionBySession = new Map<string, number>()
+  const pendingPtyDataChunksBySession = new Map<string, string[]>()
+  const pendingPtyDataCharsBySession = new Map<string, number>()
+  const pendingPtyDataFlushTimerBySession = new Map<string, NodeJS.Timeout>()
+
+  const PTY_DATA_FLUSH_DELAY_MS = 16
+  const PTY_DATA_MAX_BATCH_CHARS = 64_000
+
+  const sendToAllWindows = <Payload>(channel: string, payload: Payload): void => {
+    for (const content of webContents.getAllWebContents()) {
+      if (content.isDestroyed() || content.getType() !== 'window') {
+        continue
+      }
+
+      try {
+        content.send(channel, payload)
+      } catch {
+        // Ignore delivery failures (destroyed webContents, navigation in progress, etc.)
+      }
+    }
+  }
+
+  const flushPtyDataBroadcast = (sessionId: string): void => {
+    const timer = pendingPtyDataFlushTimerBySession.get(sessionId)
+    if (timer) {
+      clearTimeout(timer)
+      pendingPtyDataFlushTimerBySession.delete(sessionId)
+    }
+
+    const chunks = pendingPtyDataChunksBySession.get(sessionId)
+    if (!chunks || chunks.length === 0) {
+      pendingPtyDataChunksBySession.delete(sessionId)
+      pendingPtyDataCharsBySession.delete(sessionId)
+      return
+    }
+
+    pendingPtyDataChunksBySession.delete(sessionId)
+    pendingPtyDataCharsBySession.delete(sessionId)
+
+    const eventPayload: TerminalDataEvent = { sessionId, data: chunks.join('') }
+    sendToAllWindows(IPC_CHANNELS.ptyData, eventPayload)
+  }
+
+  const queuePtyDataBroadcast = (sessionId: string, data: string): void => {
+    if (data.length === 0) {
+      return
+    }
+
+    const chunks = pendingPtyDataChunksBySession.get(sessionId) ?? []
+    if (chunks.length === 0) {
+      pendingPtyDataChunksBySession.set(sessionId, chunks)
+    }
+
+    chunks.push(data)
+    pendingPtyDataCharsBySession.set(
+      sessionId,
+      (pendingPtyDataCharsBySession.get(sessionId) ?? 0) + data.length,
+    )
+
+    if ((pendingPtyDataCharsBySession.get(sessionId) ?? 0) >= PTY_DATA_MAX_BATCH_CHARS) {
+      flushPtyDataBroadcast(sessionId)
+      return
+    }
+
+    if (pendingPtyDataFlushTimerBySession.has(sessionId)) {
+      return
+    }
+
+    pendingPtyDataFlushTimerBySession.set(
+      sessionId,
+      setTimeout(() => {
+        flushPtyDataBroadcast(sessionId)
+      }, PTY_DATA_FLUSH_DELAY_MS),
+    )
+  }
 
   const registerSessionProbeState = (sessionId: string): void => {
     isTerminalAttachedBySession.set(sessionId, false)
@@ -321,13 +395,11 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
         onDone: doneSessionId => {
           clearSessionDoneWatcher(doneSessionId)
 
-          webContents.getAllWebContents().forEach(content => {
-            const eventPayload: TerminalDoneEvent = {
-              sessionId: doneSessionId,
-              signal: 'done',
-            }
-            content.send(IPC_CHANNELS.ptyDone, eventPayload)
-          })
+          const eventPayload: TerminalDoneEvent = {
+            sessionId: doneSessionId,
+            signal: 'done',
+          }
+          sendToAllWindows(IPC_CHANNELS.ptyDone, eventPayload)
         },
         onError: error => {
           const detail =
@@ -381,23 +453,19 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
 
       ptyManager.appendSnapshotData(sessionId, data)
 
-      webContents.getAllWebContents().forEach(content => {
-        const eventPayload: TerminalDataEvent = { sessionId, data }
-        content.send(IPC_CHANNELS.ptyData, eventPayload)
-      })
+      queuePtyDataBroadcast(sessionId, data)
     })
 
     pty.onExit(exit => {
+      flushPtyDataBroadcast(sessionId)
       clearSessionProbeState(sessionId)
       clearSessionDoneWatcher(sessionId)
       ptyManager.delete(sessionId)
-      webContents.getAllWebContents().forEach(content => {
-        const eventPayload: TerminalExitEvent = {
-          sessionId,
-          exitCode: exit.exitCode,
-        }
-        content.send(IPC_CHANNELS.ptyExit, eventPayload)
-      })
+      const eventPayload: TerminalExitEvent = {
+        sessionId,
+        exitCode: exit.exitCode,
+      }
+      sendToAllWindows(IPC_CHANNELS.ptyExit, eventPayload)
     })
   }
 
@@ -460,6 +528,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
   })
 
   ipcMain.handle(IPC_CHANNELS.ptyKill, async (_event, payload: KillTerminalInput) => {
+    flushPtyDataBroadcast(payload.sessionId)
     clearSessionProbeState(payload.sessionId)
     clearSessionDoneWatcher(payload.sessionId)
     ptyManager.kill(payload.sessionId)
@@ -574,6 +643,15 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
       })
       doneWatcherBySession.clear()
       doneWatcherVersionBySession.clear()
+
+      pendingPtyDataFlushTimerBySession.forEach(timer => {
+        clearTimeout(timer)
+      })
+      pendingPtyDataFlushTimerBySession.clear()
+      pendingPtyDataChunksBySession.clear()
+      pendingPtyDataCharsBySession.clear()
+      terminalProbeBufferBySession.clear()
+      isTerminalAttachedBySession.clear()
 
       ptyManager.disposeAll()
       ipcMain.removeHandler(IPC_CHANNELS.workspaceSelectDirectory)

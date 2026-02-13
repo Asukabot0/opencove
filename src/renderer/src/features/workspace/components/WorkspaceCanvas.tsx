@@ -51,6 +51,7 @@ interface WorkspaceCanvasProps {
   workspacePath: string
   nodes: Node<TerminalNodeData>[]
   onNodesChange: (nodes: Node<TerminalNodeData>[]) => void
+  onRequestPersistFlush?: () => void
   spaces: WorkspaceSpaceState[]
   activeSpaceId: string | null
   onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
@@ -283,6 +284,7 @@ function WorkspaceCanvasInner({
   workspacePath,
   nodes,
   onNodesChange,
+  onRequestPersistFlush,
   spaces,
   activeSpaceId,
   onSpacesChange,
@@ -545,8 +547,10 @@ function WorkspaceCanvasInner({
           height: boundedSize.height,
         },
       })
+
+      onRequestPersistFlush?.()
     },
-    [upsertNode],
+    [onRequestPersistFlush, upsertNode],
   )
 
   const applyPendingScrollbacks = useCallback((targetNodes: Node<TerminalNodeData>[]) => {
@@ -679,9 +683,10 @@ function WorkspaceCanvasInner({
       }
 
       setNodes(prevNodes => [...prevNodes, nextNode])
+      onRequestPersistFlush?.()
       return nextNode
     },
-    [setNodes],
+    [onRequestPersistFlush, setNodes],
   )
 
   const createTaskNode = useCallback(
@@ -738,9 +743,10 @@ function WorkspaceCanvasInner({
       }
 
       setNodes(prevNodes => [...prevNodes, nextNode])
+      onRequestPersistFlush?.()
       return nextNode
     },
-    [setNodes],
+    [onRequestPersistFlush, setNodes],
   )
 
   const launchAgentInNode = useCallback(
@@ -1004,6 +1010,7 @@ function WorkspaceCanvasInner({
               return node
             }),
           )
+          onRequestPersistFlush?.()
 
           await launchAgentInNode(linkedAgentNodeId, 'new')
           return
@@ -1028,6 +1035,7 @@ function WorkspaceCanvasInner({
             }
           }),
         )
+        onRequestPersistFlush?.()
       }
 
       const provider = agentSettings.defaultProvider
@@ -1094,6 +1102,7 @@ function WorkspaceCanvasInner({
             }
           }),
         )
+        onRequestPersistFlush?.()
       } catch (error) {
         setNodes(prevNodes =>
           prevNodes.map(node => {
@@ -1110,6 +1119,7 @@ function WorkspaceCanvasInner({
             }
           }),
         )
+        onRequestPersistFlush?.()
       }
     },
     [
@@ -1117,6 +1127,7 @@ function WorkspaceCanvasInner({
       buildAgentNodeTitle,
       createNodeForSession,
       launchAgentInNode,
+      onRequestPersistFlush,
       setNodes,
       workspacePath,
     ],
@@ -1143,8 +1154,10 @@ function WorkspaceCanvasInner({
           }
         }),
       )
+
+      onRequestPersistFlush?.()
     },
-    [setNodes],
+    [onRequestPersistFlush, setNodes],
   )
 
   const quickUpdateTaskTitle = useCallback(
@@ -1176,8 +1189,10 @@ function WorkspaceCanvasInner({
           }
         }),
       )
+
+      onRequestPersistFlush?.()
     },
-    [setNodes],
+    [onRequestPersistFlush, setNodes],
   )
 
   const quickUpdateTaskRequirement = useCallback(
@@ -1208,8 +1223,10 @@ function WorkspaceCanvasInner({
           }
         }),
       )
+
+      onRequestPersistFlush?.()
     },
-    [setNodes],
+    [onRequestPersistFlush, setNodes],
   )
 
   const suggestTaskTitle = useCallback(
@@ -2195,6 +2212,7 @@ function WorkspaceCanvasInner({
         })
       })
 
+      onRequestPersistFlush?.()
       setTaskAssigner(null)
     } catch (error) {
       setTaskAssigner(prev =>
@@ -2207,7 +2225,7 @@ function WorkspaceCanvasInner({
           : prev,
       )
     }
-  }, [setNodes, taskAssigner])
+  }, [onRequestPersistFlush, setNodes, taskAssigner])
 
   const generateTaskTitle = useCallback(async () => {
     if (!taskCreator) {
@@ -2521,6 +2539,7 @@ function WorkspaceCanvasInner({
         }),
       )
 
+      onRequestPersistFlush?.()
       setTaskEditor(null)
     } catch (error) {
       setTaskEditor(prev =>
@@ -2533,7 +2552,7 @@ function WorkspaceCanvasInner({
           : prev,
       )
     }
-  }, [setNodes, suggestTaskTitle, taskEditor, taskTagOptions])
+  }, [onRequestPersistFlush, setNodes, suggestTaskTitle, taskEditor, taskTagOptions])
 
   const requestTaskDelete = useCallback(
     (nodeId: string) => {

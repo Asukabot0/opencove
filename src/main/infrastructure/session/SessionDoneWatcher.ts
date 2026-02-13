@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
+import { StringDecoder } from 'node:string_decoder'
 import type { AgentProviderId } from '../../../shared/types/api'
 import { detectDoneSignalFromSessionLine } from './DoneSignalDetector'
 
@@ -20,6 +21,8 @@ function isFileMissingError(error: unknown): boolean {
   return record.code === 'ENOENT'
 }
 
+const READ_CHUNK_BYTES = 64 * 1024
+
 export class SessionDoneWatcher {
   private readonly provider: AgentProviderId
   private readonly sessionId: string
@@ -30,6 +33,7 @@ export class SessionDoneWatcher {
   private watcher: fs.FSWatcher | null = null
   private offset = 0
   private remainder = ''
+  private decoder = new StringDecoder('utf8')
   private disposed = false
   private processing = false
   private hasPendingRead = false
@@ -121,32 +125,49 @@ export class SessionDoneWatcher {
       if (stats.size < this.offset) {
         this.offset = 0
         this.remainder = ''
+        this.decoder = new StringDecoder('utf8')
       }
 
       if (stats.size === this.offset) {
         return
       }
 
-      const length = stats.size - this.offset
-      const buffer = Buffer.alloc(length)
-      await handle.read(buffer, 0, length, this.offset)
-      this.offset = stats.size
+      const end = stats.size
+      let position = this.offset
 
-      const chunk = buffer.toString('utf8')
-      const merged = `${this.remainder}${chunk}`
-      const lines = merged.split('\n')
-      this.remainder = lines.pop() ?? ''
+      while (position < end && !this.disposed && !this.hasTriggeredDone) {
+        const bytesToRead = Math.min(READ_CHUNK_BYTES, end - position)
+        const buffer = Buffer.allocUnsafe(bytesToRead)
+        // eslint-disable-next-line no-await-in-loop
+        const { bytesRead } = await handle.read(buffer, 0, bytesToRead, position)
+        if (bytesRead <= 0) {
+          break
+        }
 
-      for (const line of lines) {
-        if (!detectDoneSignalFromSessionLine(this.provider, line)) {
+        position += bytesRead
+
+        const textChunk = this.decoder.write(buffer.subarray(0, bytesRead))
+        if (textChunk.length === 0) {
           continue
         }
 
-        this.hasTriggeredDone = true
-        this.onDone(this.sessionId)
-        this.dispose()
-        return
+        const merged = `${this.remainder}${textChunk}`
+        const lines = merged.split('\n')
+        this.remainder = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!detectDoneSignalFromSessionLine(this.provider, line)) {
+            continue
+          }
+
+          this.hasTriggeredDone = true
+          this.onDone(this.sessionId)
+          this.dispose()
+          return
+        }
       }
+
+      this.offset = position
     } finally {
       await handle.close()
     }

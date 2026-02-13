@@ -22,6 +22,9 @@ import type {
 type UnsubscribeFn = () => void
 
 export interface CoveApi {
+  meta: {
+    isTest: boolean
+  }
   workspace: {
     selectDirectory: () => Promise<WorkspaceDirectory | null>
     ensureDirectory: (payload: EnsureDirectoryInput) => Promise<void>

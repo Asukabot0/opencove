@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  flushScheduledPersistedStateWrite,
   readPersistedState,
+  schedulePersistedStateWrite,
   toPersistedState,
   writePersistedState,
   writeRawPersistedState,
@@ -354,5 +356,69 @@ describe('workspace persistence', () => {
   it('returns null when stored json is invalid', () => {
     writeRawPersistedState('{')
     expect(readPersistedState()).toBeNull()
+  })
+
+  it('debounces persisted state writes and keeps latest payload', () => {
+    vi.useFakeTimers()
+
+    const setItemSpy = vi.spyOn(window.localStorage, 'setItem')
+
+    schedulePersistedStateWrite(() => toPersistedState([], 'workspace-1'), { delayMs: 10 })
+    schedulePersistedStateWrite(() => toPersistedState([], 'workspace-2'), { delayMs: 10 })
+
+    expect(setItemSpy).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(10)
+
+    expect(setItemSpy).toHaveBeenCalledTimes(1)
+    const [, raw] = setItemSpy.mock.calls[0] as [string, string]
+    expect(JSON.parse(raw).activeWorkspaceId).toBe('workspace-2')
+
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('flushes scheduled persisted state writes immediately', () => {
+    vi.useFakeTimers()
+
+    const setItemSpy = vi.spyOn(window.localStorage, 'setItem')
+
+    schedulePersistedStateWrite(() => toPersistedState([], 'workspace-1'), { delayMs: 10_000 })
+    flushScheduledPersistedStateWrite()
+
+    expect(setItemSpy).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(10_000)
+
+    expect(setItemSpy).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('ignores persistence failures (quota exceeded, disabled storage, etc.)', () => {
+    const previousStorage = window.localStorage
+
+    class ThrowingStorage extends MockStorage {
+      public override setItem(_key: string, _value: string): void {
+        throw new Error('QuotaExceededError')
+      }
+    }
+
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: new ThrowingStorage(),
+    })
+
+    expect(() => {
+      writePersistedState(toPersistedState([], null))
+    }).not.toThrow()
+
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      writable: true,
+      value: previousStorage,
+    })
   })
 })

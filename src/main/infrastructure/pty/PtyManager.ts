@@ -14,9 +14,42 @@ export interface SpawnPtyOptions {
 
 const MAX_SNAPSHOT_CHARS = 400_000
 
+interface SnapshotState {
+  chunks: string[]
+  head: number
+  length: number
+}
+
+function trimSnapshot(state: SnapshotState): void {
+  if (state.length <= MAX_SNAPSHOT_CHARS) {
+    return
+  }
+
+  let excess = state.length - MAX_SNAPSHOT_CHARS
+
+  while (excess > 0 && state.head < state.chunks.length) {
+    const headChunk = state.chunks[state.head] ?? ''
+    if (headChunk.length <= excess) {
+      excess -= headChunk.length
+      state.length -= headChunk.length
+      state.head += 1
+      continue
+    }
+
+    state.chunks[state.head] = headChunk.slice(excess)
+    state.length -= excess
+    excess = 0
+  }
+
+  if (state.head > 64) {
+    state.chunks = state.chunks.slice(state.head)
+    state.head = 0
+  }
+}
+
 export class PtyManager {
   private sessions = new Map<string, IPty>()
-  private snapshots = new Map<string, string>()
+  private snapshots = new Map<string, SnapshotState>()
 
   public spawnSession(options: SpawnPtyOptions): { sessionId: string; pty: IPty } {
     const sessionId = crypto.randomUUID()
@@ -32,7 +65,7 @@ export class PtyManager {
     })
 
     this.sessions.set(sessionId, pty)
-    this.snapshots.set(sessionId, '')
+    this.snapshots.set(sessionId, { chunks: [], head: 0, length: 0 })
 
     return { sessionId, pty }
   }
@@ -42,19 +75,30 @@ export class PtyManager {
       return
     }
 
-    const previous = this.snapshots.get(sessionId) ?? ''
-    const next = previous + data
-
-    if (next.length <= MAX_SNAPSHOT_CHARS) {
-      this.snapshots.set(sessionId, next)
+    const snapshot = this.snapshots.get(sessionId)
+    if (!snapshot) {
       return
     }
 
-    this.snapshots.set(sessionId, next.slice(-MAX_SNAPSHOT_CHARS))
+    if (data.length >= MAX_SNAPSHOT_CHARS) {
+      snapshot.chunks = [data.slice(-MAX_SNAPSHOT_CHARS)]
+      snapshot.head = 0
+      snapshot.length = MAX_SNAPSHOT_CHARS
+      return
+    }
+
+    snapshot.chunks.push(data)
+    snapshot.length += data.length
+    trimSnapshot(snapshot)
   }
 
   public snapshot(sessionId: string): string {
-    return this.snapshots.get(sessionId) ?? ''
+    const snapshot = this.snapshots.get(sessionId)
+    if (!snapshot || snapshot.length === 0 || snapshot.head >= snapshot.chunks.length) {
+      return ''
+    }
+
+    return snapshot.chunks.slice(snapshot.head).join('')
   }
 
   public write(sessionId: string, data: string): void {
