@@ -4,6 +4,10 @@ export type AgentProvider = (typeof AGENT_PROVIDERS)[number]
 
 export type TaskTitleProvider = 'default' | AgentProvider
 
+export const CANVAS_INPUT_MODES = ['auto', 'mouse', 'trackpad'] as const
+
+export type CanvasInputMode = (typeof CANVAS_INPUT_MODES)[number]
+
 export const AGENT_PROVIDER_LABEL: Record<AgentProvider, string> = {
   'claude-code': 'Claude Code',
   codex: 'Codex',
@@ -30,6 +34,7 @@ export interface AgentSettings {
   taskTitleModel: string
   taskTagOptions: string[]
   normalizeZoomOnTerminalClick: boolean
+  canvasInputMode: CanvasInputMode
 }
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
@@ -50,6 +55,7 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   taskTitleModel: '',
   taskTagOptions: ['feature', 'bug', 'refactor', 'docs', 'test'],
   normalizeZoomOnTerminalClick: true,
+  canvasInputMode: 'auto',
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -62,6 +68,10 @@ function isValidProvider(value: unknown): value is AgentProvider {
 
 function isValidTaskTitleProvider(value: unknown): value is TaskTitleProvider {
   return value === 'default' || isValidProvider(value)
+}
+
+function isValidCanvasInputMode(value: unknown): value is CanvasInputMode {
+  return typeof value === 'string' && CANVAS_INPUT_MODES.includes(value as CanvasInputMode)
 }
 
 function normalizeTextValue(value: unknown): string {
@@ -218,6 +228,9 @@ export function normalizeAgentSettings(value: unknown): AgentSettings {
   const normalizeZoomOnTerminalClick =
     normalizeBoolean(value.normalizeZoomOnTerminalClick) ??
     DEFAULT_AGENT_SETTINGS.normalizeZoomOnTerminalClick
+  const canvasInputMode = isValidCanvasInputMode(value.canvasInputMode)
+    ? value.canvasInputMode
+    : DEFAULT_AGENT_SETTINGS.canvasInputMode
 
   return {
     defaultProvider,
@@ -228,5 +241,6 @@ export function normalizeAgentSettings(value: unknown): AgentSettings {
     taskTitleModel,
     taskTagOptions,
     normalizeZoomOnTerminalClick,
+    canvasInputMode,
   }
 }

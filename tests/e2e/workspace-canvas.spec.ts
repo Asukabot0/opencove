@@ -573,7 +573,7 @@ test.describe('Workspace Canvas Interactions', () => {
         })
         .toBeGreaterThan(1.01)
 
-      await terminal.locator('.xterm').click()
+      await terminal.locator('.terminal-node__terminal').click()
 
       await expect
         .poll(async () => {
@@ -636,7 +636,7 @@ test.describe('Workspace Canvas Interactions', () => {
 
       const firstTerminal = window.locator('.terminal-node').filter({ hasText: 'terminal-zoom-1' })
       await expect(firstTerminal).toBeVisible()
-      await firstTerminal.locator('.xterm').click()
+      await firstTerminal.locator('.terminal-node__terminal').click()
 
       await expect
         .poll(async () => {
@@ -646,7 +646,7 @@ test.describe('Workspace Canvas Interactions', () => {
 
       const secondTerminal = window.locator('.terminal-node').filter({ hasText: 'terminal-zoom-2' })
       await expect(secondTerminal).toBeVisible()
-      await secondTerminal.locator('.xterm').click()
+      await secondTerminal.locator('.terminal-node__terminal').click()
 
       const readCenterDelta = async (): Promise<{ dx: number; dy: number }> => {
         const canvasBox = await window.locator('.workspace-canvas .react-flow').boundingBox()
@@ -1127,6 +1127,468 @@ test.describe('Workspace Canvas Interactions', () => {
       }, storageKey)
 
       expect(spaceCount).toBe(0)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('supports trackpad selection replace/add semantics', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'trackpad-select-node-a',
+            title: 'terminal-trackpad-select-a',
+            position: { x: 220, y: 180 },
+            width: 460,
+            height: 300,
+          },
+          {
+            id: 'trackpad-select-node-b',
+            title: 'terminal-trackpad-select-b',
+            position: { x: 760, y: 220 },
+            width: 460,
+            height: 300,
+          },
+        ],
+        {
+          settings: {
+            canvasInputMode: 'trackpad',
+          },
+        },
+      )
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
+
+      await pane.dragTo(pane, {
+        sourcePosition: { x: 120, y: 120 },
+        targetPosition: { x: 700, y: 520 },
+      })
+
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+      await expect(
+        window.locator('.react-flow__node.selected .terminal-node__title').first(),
+      ).toContainText('terminal-trackpad-select-a')
+
+      const secondNode = window
+        .locator('.terminal-node')
+        .filter({ hasText: 'terminal-trackpad-select-b' })
+        .first()
+      const secondNodeBox = await secondNode.boundingBox()
+      if (!secondNodeBox) {
+        throw new Error('second node bounding box unavailable')
+      }
+
+      const selectionStartX = Math.max(paneBox.x + 40, secondNodeBox.x - 24)
+      const selectionStartY = Math.max(paneBox.y + 40, secondNodeBox.y - 24)
+      const selectionEndX = Math.min(
+        paneBox.x + paneBox.width - 40,
+        secondNodeBox.x + secondNodeBox.width - 24,
+      )
+      const selectionEndY = Math.min(
+        paneBox.y + paneBox.height - 120,
+        secondNodeBox.y + secondNodeBox.height - 24,
+      )
+
+      await window.keyboard.down('Shift')
+      await window.mouse.move(selectionStartX, selectionStartY)
+      await window.mouse.down()
+      await window.mouse.move(selectionEndX, selectionEndY, { steps: 10 })
+      await window.mouse.up()
+      await window.keyboard.up('Shift')
+
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(2)
+
+      const firstNode = window
+        .locator('.terminal-node')
+        .filter({ hasText: 'terminal-trackpad-select-a' })
+        .first()
+      const firstNodeBoxForReplace = await firstNode.boundingBox()
+      if (!firstNodeBoxForReplace) {
+        throw new Error('first node bounding box unavailable for replace drag')
+      }
+      const replaceStartX = Math.max(paneBox.x + 40, firstNodeBoxForReplace.x - 24)
+      const replaceStartY = Math.max(paneBox.y + 40, firstNodeBoxForReplace.y - 24)
+      const replaceEndX = Math.min(
+        paneBox.x + paneBox.width - 40,
+        firstNodeBoxForReplace.x + firstNodeBoxForReplace.width - 24,
+      )
+      const replaceEndY = Math.min(
+        paneBox.y + paneBox.height - 120,
+        firstNodeBoxForReplace.y + firstNodeBoxForReplace.height - 24,
+      )
+
+      await window.mouse.move(replaceStartX, replaceStartY)
+      await window.mouse.down()
+      await window.mouse.move(replaceEndX, replaceEndY, { steps: 10 })
+      await window.mouse.up()
+
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+      await expect(
+        window.locator('.react-flow__node.selected .terminal-node__title').first(),
+      ).toContainText('terminal-trackpad-select-a')
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('keeps selection while panning and clears selection on blank pane click', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'trackpad-pan-select-node',
+            title: 'terminal-trackpad-pan-select',
+            position: { x: 220, y: 180 },
+            width: 460,
+            height: 300,
+          },
+        ],
+        {
+          settings: {
+            canvasInputMode: 'trackpad',
+          },
+        },
+      )
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+
+      await pane.dragTo(pane, {
+        sourcePosition: { x: 120, y: 120 },
+        targetPosition: { x: 700, y: 520 },
+      })
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+
+      await window.evaluate(() => {
+        const paneElement = document.querySelector('.workspace-canvas .react-flow__pane')
+        if (!(paneElement instanceof HTMLElement)) {
+          return
+        }
+
+        paneElement.dispatchEvent(
+          new WheelEvent('wheel', {
+            deltaX: 140,
+            deltaY: 40,
+            deltaMode: 0,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      })
+
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+
+      await pane.click({
+        position: { x: 40, y: 40 },
+      })
+
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('does not select nodes on plain drag in mouse mode', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'mouse-select-node',
+            title: 'terminal-mouse-select',
+            position: { x: 220, y: 180 },
+            width: 460,
+            height: 300,
+          },
+        ],
+        {
+          settings: {
+            canvasInputMode: 'mouse',
+          },
+        },
+      )
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
+
+      await pane.dragTo(pane, {
+        sourcePosition: { x: 80, y: 80 },
+        targetPosition: { x: 760, y: 560 },
+      })
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('auto mode switches to trackpad interaction after gesture-like wheel input', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [
+        {
+          id: 'auto-trackpad-select-node',
+          title: 'terminal-auto-trackpad-select',
+          position: { x: 220, y: 180 },
+          width: 460,
+          height: 300,
+        },
+      ])
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
+
+      await window.evaluate(() => {
+        const paneElement = document.querySelector('.workspace-canvas .react-flow__pane')
+        if (!(paneElement instanceof HTMLElement)) {
+          return
+        }
+
+        const dispatch = (deltaX: number, deltaY: number, ctrlKey: boolean): void => {
+          paneElement.dispatchEvent(
+            new WheelEvent('wheel', {
+              deltaX,
+              deltaY,
+              deltaMode: 0,
+              ctrlKey,
+              bubbles: true,
+              cancelable: true,
+            }),
+          )
+        }
+
+        dispatch(0, 2, true)
+        dispatch(1.1, 1.8, false)
+        dispatch(1, 1.5, false)
+      })
+
+      await pane.dragTo(pane, {
+        sourcePosition: { x: 80, y: 80 },
+        targetPosition: { x: 760, y: 560 },
+      })
+
+      await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('locks trackpad pan target to canvas across contiguous wheel gestures', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'trackpad-pan-lock-node',
+            title: 'terminal-trackpad-pan-lock',
+            position: { x: 320, y: 260 },
+            width: 460,
+            height: 300,
+          },
+        ],
+        {
+          settings: {
+            canvasInputMode: 'trackpad',
+          },
+        },
+      )
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      const terminal = window.locator('.terminal-node').first()
+      await expect(pane).toBeVisible()
+      await expect(terminal).toBeVisible()
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
+      const terminalBox = await terminal.boundingBox()
+      if (!terminalBox) {
+        throw new Error('terminal node bounding box unavailable')
+      }
+
+      const before = await readCanvasViewport(window)
+
+      await window.mouse.move(paneBox.x + 120, paneBox.y + 120)
+      await window.mouse.wheel(120, 0)
+
+      await window.mouse.move(terminalBox.x + 80, terminalBox.y + 80)
+      await window.mouse.wheel(120, 0)
+
+      await expect
+        .poll(async () => {
+          const current = await readCanvasViewport(window)
+          return Math.abs(current.x - before.x)
+        })
+        .toBeGreaterThan(80)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('restores terminal wheel scrolling after a trackpad pan gesture gap', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'trackpad-terminal-scroll-after-pan',
+            title: 'terminal-trackpad-scroll-after-pan',
+            position: { x: 240, y: 200 },
+            width: 520,
+            height: 320,
+          },
+        ],
+        {
+          settings: {
+            canvasInputMode: 'trackpad',
+          },
+        },
+      )
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      const terminal = window.locator('.terminal-node').first()
+      await expect(pane).toBeVisible()
+      await expect(terminal).toBeVisible()
+
+      const terminalInput = terminal.locator('.xterm-helper-textarea')
+      await expect(terminalInput).toBeVisible()
+      await terminalInput.click()
+      await window.keyboard.type('for i in $(seq 1 260); do echo TRACKPAD_SCROLL_$i; done')
+      await terminalInput.press('Enter')
+      await expect(terminal).toContainText('TRACKPAD_SCROLL_260')
+
+      await window.evaluate(() => {
+        const paneElement = document.querySelector('.workspace-canvas .react-flow__pane')
+        if (!(paneElement instanceof HTMLElement)) {
+          return
+        }
+
+        paneElement.dispatchEvent(
+          new WheelEvent('wheel', {
+            deltaX: 160,
+            deltaY: 24,
+            deltaMode: 0,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+      })
+
+      await window.waitForTimeout(280)
+
+      const visibleRows = terminal.locator('.xterm-rows')
+      const beforeRows = await visibleRows.innerText()
+
+      await terminal.hover()
+      await window.mouse.wheel(0, -900)
+      await window.waitForTimeout(120)
+
+      const afterRows = await visibleRows.innerText()
+      expect(afterRows).not.toBe(beforeRows)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('uses pointer location as zoom anchor for trackpad pinch', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'trackpad-pinch-anchor-node',
+            title: 'terminal-trackpad-pinch-anchor',
+            position: { x: 420, y: 300 },
+            width: 520,
+            height: 320,
+          },
+        ],
+        {
+          settings: {
+            canvasInputMode: 'trackpad',
+          },
+        },
+      )
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+
+      const initialViewport = await readCanvasViewport(window)
+
+      const invariants = await window.evaluate(initial => {
+        const paneElement = document.querySelector('.workspace-canvas .react-flow__pane')
+        if (!(paneElement instanceof HTMLElement)) {
+          return null
+        }
+
+        const rect = paneElement.getBoundingClientRect()
+        const anchorClientX = rect.left + rect.width * 0.82
+        const anchorClientY = rect.top + rect.height * 0.26
+        const anchorLocalX = anchorClientX - rect.left
+        const anchorLocalY = anchorClientY - rect.top
+
+        const flowBefore = {
+          x: (anchorLocalX - initial.x) / initial.zoom,
+          y: (anchorLocalY - initial.y) / initial.zoom,
+        }
+
+        paneElement.dispatchEvent(
+          new WheelEvent('wheel', {
+            deltaX: 0,
+            deltaY: -120,
+            deltaMode: 0,
+            ctrlKey: true,
+            clientX: anchorClientX,
+            clientY: anchorClientY,
+            bubbles: true,
+            cancelable: true,
+          }),
+        )
+
+        return {
+          anchorLocalX,
+          anchorLocalY,
+          flowBefore,
+        }
+      }, initialViewport)
+
+      if (!invariants) {
+        throw new Error('workspace pane element unavailable for pinch anchor test')
+      }
+
+      const nextViewport = await readCanvasViewport(window)
+      expect(nextViewport.zoom).toBeGreaterThan(initialViewport.zoom)
+
+      const flowAfter = {
+        x: (invariants.anchorLocalX - nextViewport.x) / nextViewport.zoom,
+        y: (invariants.anchorLocalY - nextViewport.y) / nextViewport.zoom,
+      }
+
+      expect(Math.abs(flowAfter.x - invariants.flowBefore.x)).toBeLessThan(0.6)
+      expect(Math.abs(flowAfter.y - invariants.flowBefore.y)).toBeLessThan(0.6)
     } finally {
       await electronApp.close()
     }

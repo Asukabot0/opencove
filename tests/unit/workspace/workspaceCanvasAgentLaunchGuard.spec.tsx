@@ -52,6 +52,9 @@ vi.mock('@xyflow/react', () => {
     MarkerType: {
       ArrowClosed: 'arrowclosed',
     },
+    PanOnScrollMode: {
+      Free: 'free',
+    },
   }
 })
 

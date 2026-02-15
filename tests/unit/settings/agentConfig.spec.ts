@@ -12,6 +12,7 @@ describe('agent settings normalization', () => {
     expect(normalizeAgentSettings(null)).toEqual(DEFAULT_AGENT_SETTINGS)
     expect(normalizeAgentSettings('invalid')).toEqual(DEFAULT_AGENT_SETTINGS)
     expect(DEFAULT_AGENT_SETTINGS.normalizeZoomOnTerminalClick).toBe(true)
+    expect(DEFAULT_AGENT_SETTINGS.canvasInputMode).toBe('auto')
   })
 
   it('keeps valid provider, custom model, and model option fields', () => {
@@ -33,6 +34,7 @@ describe('agent settings normalization', () => {
       taskTitleModel: 'claude-opus-4-6',
       taskTagOptions: ['feature', 'bug', 'feature', ''],
       normalizeZoomOnTerminalClick: false,
+      canvasInputMode: 'trackpad',
     })
 
     expect(result.defaultProvider).toBe('codex')
@@ -49,6 +51,7 @@ describe('agent settings normalization', () => {
     expect(result.taskTitleModel).toBe('claude-opus-4-6')
     expect(result.taskTagOptions).toEqual(['feature', 'bug'])
     expect(result.normalizeZoomOnTerminalClick).toBe(false)
+    expect(result.canvasInputMode).toBe('trackpad')
     expect(resolveTaskTitleProvider(result)).toBe('claude-code')
     expect(resolveTaskTitleModel(result)).toBe('claude-opus-4-6')
     expect(resolveAgentModel(result, 'claude-code')).toBe('claude-opus-4-6')
@@ -83,10 +86,19 @@ describe('agent settings normalization', () => {
     expect(result.taskTitleModel).toBe('')
     expect(result.taskTagOptions).toEqual(['ops'])
     expect(result.normalizeZoomOnTerminalClick).toBe(true)
+    expect(result.canvasInputMode).toBe('auto')
     expect(resolveAgentModel(result, 'claude-code')).toBeNull()
     expect(resolveAgentModel(result, 'codex')).toBe('gpt-5.2-codex')
     expect(resolveTaskTitleProvider(result)).toBe('claude-code')
     expect(resolveTaskTitleModel(result)).toBeNull()
+  })
+
+  it('falls back to auto canvas input mode when input is invalid', () => {
+    const result = normalizeAgentSettings({
+      canvasInputMode: 'touchscreen',
+    })
+
+    expect(result.canvasInputMode).toBe('auto')
   })
 
   it('migrates legacy modelByProvider to custom override', () => {

@@ -117,6 +117,19 @@ function getStatusClassName(status: AgentRuntimeStatus | null): string {
   }
 }
 
+function shouldStopWheelPropagation(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return true
+  }
+
+  const canvas = target.closest('.workspace-canvas')
+  if (!(canvas instanceof HTMLElement)) {
+    return true
+  }
+
+  return canvas.dataset.canvasInputMode !== 'trackpad'
+}
+
 export function TerminalNode({
   sessionId,
   title,
@@ -528,7 +541,9 @@ export function TerminalNode({
       className="terminal-node nowheel"
       style={sizeStyle}
       onWheel={event => {
-        event.stopPropagation()
+        if (shouldStopWheelPropagation(event.currentTarget)) {
+          event.stopPropagation()
+        }
       }}
     >
       <Handle type="target" position={Position.Left} className="workspace-node-handle" />

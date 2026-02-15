@@ -2,10 +2,12 @@ import React, { useMemo, useState } from 'react'
 import {
   AGENT_PROVIDER_LABEL,
   AGENT_PROVIDERS,
+  CANVAS_INPUT_MODES,
   resolveAgentModel,
   resolveTaskTitleProvider,
   type AgentProvider,
   type AgentSettings,
+  type CanvasInputMode,
   type TaskTitleProvider,
 } from '../agentConfig'
 
@@ -106,6 +108,13 @@ export function SettingsPanel({
     onChange({
       ...settings,
       normalizeZoomOnTerminalClick: enabled,
+    })
+  }
+
+  const updateCanvasInputMode = (mode: CanvasInputMode): void => {
+    onChange({
+      ...settings,
+      canvasInputMode: mode,
     })
   }
 
@@ -309,6 +318,27 @@ export function SettingsPanel({
 
             <div className="settings-panel__section" id="settings-section-canvas">
               <h3>Canvas Interaction</h3>
+              <div className="settings-panel__row">
+                <span>Input Mode</span>
+                <select
+                  id="settings-canvas-input-mode"
+                  data-testid="settings-canvas-input-mode"
+                  value={settings.canvasInputMode}
+                  onChange={event => {
+                    updateCanvasInputMode(event.target.value as CanvasInputMode)
+                  }}
+                >
+                  {CANVAS_INPUT_MODES.map(mode => (
+                    <option key={mode} value={mode}>
+                      {mode === 'auto'
+                        ? 'Auto (Detect from gestures)'
+                        : mode === 'trackpad'
+                          ? 'Trackpad (Drag selects)'
+                          : 'Mouse (Shift+Drag selects)'}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <label className="settings-provider-card__toggle">
                 <input
                   id="settings-normalize-zoom-on-terminal-click"
@@ -321,6 +351,10 @@ export function SettingsPanel({
                 />
                 <span>Click terminal auto-zooms canvas to 100%</span>
               </label>
+              <p className="settings-panel__hint">
+                Auto mode infers trackpad vs mouse from wheel and pinch input. If detection does not
+                match your hardware, choose a fixed mode.
+              </p>
             </div>
 
             <div className="settings-panel__section" id="settings-section-task-title">

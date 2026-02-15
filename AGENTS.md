@@ -77,11 +77,8 @@ Follow this cycle for every task to ensure quality and traceability:
 
 ### Step 3. Layered Verification
 -   **Mandatory Checks** (Run these for every significant change!):
-    1.  `pnpm lint:fix` (oxlint auto-fix)
-    2.  `pnpm format:check` (prettier)
-    3.  `pnpm check` (typescript type check - CRITICAL)
-    4.  `pnpm test -- --run` (vitest unit tests)
-    5.  `pnpm test:e2e` (playwright - for UI/IPC flows)
+    1.  `pnpm pre-commit` (single entrypoint; includes staged line/secret checks + lint + format + typecheck + unit tests + E2E)
+    2.  If you need to debug failures, run the underlying commands separately.
 -   **Failure Handling**: Fix root cause, do not suppress errors. Run full suite if unsure.
 
 ### Step 4. UI Automation & Manual Verification
@@ -91,6 +88,7 @@ Follow this cycle for every task to ensure quality and traceability:
 
 ### Step 5. Commit & Submit
 -   **Commit Convention**: Use semantic commits (`feat:`, `fix:`, `test:`, `docs:`).
+-   **Commit Gate**: Husky no longer runs pre-commit checks automatically. You MUST run `pnpm pre-commit` manually and pass it before committing.
 -   **Handoff**: Provide a summary of:
     -   Changes made (files).
     -   Verification results (test output, screenshots).

@@ -16,6 +16,7 @@ import {
   SelectionMode,
   type Viewport,
   MarkerType,
+  PanOnScrollMode,
 } from '@xyflow/react'
 import { Map as MapIcon } from 'lucide-react'
 import {
@@ -45,6 +46,11 @@ import {
   findNearestFreePosition,
   isPositionAvailable,
 } from '../utils/collision'
+import {
+  createCanvasInputModalityState,
+  inferCanvasInputModalityFromWheel,
+  type DetectedCanvasInputMode,
+} from '../utils/inputModality'
 
 interface WorkspaceCanvasProps {
   workspaceId: string
@@ -86,6 +92,8 @@ interface SelectionDraftState {
   startY: number
   currentX: number
   currentY: number
+  additive: boolean
+  selectedNodeIdsAtStart: string[]
 }
 
 interface EmptySelectionPromptState {
@@ -100,6 +108,15 @@ interface SpaceDragState {
   startFlow: Point
   initialRect: WorkspaceSpaceRect | null
   initialNodePositions: Map<string, Point>
+}
+
+type TrackpadGestureAction = 'pan' | 'pinch'
+type TrackpadGestureTarget = 'canvas' | 'node'
+
+interface TrackpadGestureLockState {
+  action: TrackpadGestureAction
+  target: TrackpadGestureTarget
+  lastTimestamp: number
 }
 
 interface AgentLauncherState {
@@ -176,6 +193,12 @@ const MIN_SIZE: Size = {
   height: 220,
 }
 
+const MIN_CANVAS_ZOOM = 0.1
+const MAX_CANVAS_ZOOM = 2
+const TRACKPAD_PAN_SCROLL_SPEED = 0.5
+const TRACKPAD_PINCH_SENSITIVITY = 0.01
+const TRACKPAD_GESTURE_LOCK_GAP_MS = 220
+
 const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority; label: string }> = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },
@@ -184,6 +207,22 @@ const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority; label: string }> = [
 ]
 
 const TASK_PRIORITIES: TaskPriority[] = TASK_PRIORITY_OPTIONS.map(option => option.value)
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+function resolveWheelAction(ctrlKey: boolean): TrackpadGestureAction {
+  return ctrlKey ? 'pinch' : 'pan'
+}
+
+function resolveWheelTarget(target: EventTarget | null): TrackpadGestureTarget {
+  if (target instanceof Element && target.closest('.react-flow__node')) {
+    return 'node'
+  }
+
+  return 'canvas'
+}
 
 function normalizeTaskTagSelection(selection: string[], availableTags: string[]): string[] {
   const normalized: string[] = []
@@ -323,6 +362,9 @@ function WorkspaceCanvasInner({
     dy: number
   } | null>(null)
   const [spaceDragPointerId, setSpaceDragPointerId] = useState<number | null>(null)
+  const [detectedCanvasInputMode, setDetectedCanvasInputMode] =
+    useState<DetectedCanvasInputMode>('mouse')
+  const [isShiftPressed, setIsShiftPressed] = useState(false)
 
   const reactFlow = useReactFlow<Node<TerminalNodeData>, Edge>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
@@ -359,11 +401,25 @@ function WorkspaceCanvasInner({
   const normalizeViewportForTerminalInteractionRef = useRef<(nodeId: string) => void>(
     () => undefined,
   )
+  const inputModalityStateRef = useRef(createCanvasInputModalityState('mouse'))
+  const isShiftPressedRef = useRef(false)
+  const trackpadGestureLockRef = useRef<TrackpadGestureLockState | null>(null)
+  const viewportRef = useRef<Viewport>(viewport)
 
   const taskTagOptions = useMemo(() => {
     const fromSettings = agentSettings.taskTagOptions ?? []
     return [...new Set(fromSettings.map(tag => tag.trim()).filter(tag => tag.length > 0))]
   }, [agentSettings.taskTagOptions])
+
+  const resolvedCanvasInputMode = useMemo<DetectedCanvasInputMode>(() => {
+    if (agentSettings.canvasInputMode === 'auto') {
+      return detectedCanvasInputMode
+    }
+
+    return agentSettings.canvasInputMode
+  }, [agentSettings.canvasInputMode, detectedCanvasInputMode])
+
+  const isTrackpadCanvasMode = resolvedCanvasInputMode === 'trackpad'
 
   useEffect(() => {
     nodesRef.current = nodes
@@ -391,6 +447,7 @@ function WorkspaceCanvasInner({
     setSpaceDragPointerId(null)
     spaceDragStateRef.current = null
     selectionDraftRef.current = null
+    trackpadGestureLockRef.current = null
   }, [workspaceId])
 
   useEffect(() => {
@@ -436,6 +493,50 @@ function WorkspaceCanvasInner({
       window.cancelAnimationFrame(frame)
     }
   }, [reactFlow, viewport, workspaceId])
+
+  useEffect(() => {
+    viewportRef.current = viewport
+  }, [viewport])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        isShiftPressedRef.current = true
+        setIsShiftPressed(true)
+      }
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        isShiftPressedRef.current = false
+        setIsShiftPressed(false)
+      }
+    }
+
+    const handleBlur = () => {
+      isShiftPressedRef.current = false
+      setIsShiftPressed(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (agentSettings.canvasInputMode === 'auto') {
+      return
+    }
+
+    inputModalityStateRef.current = createCanvasInputModalityState(agentSettings.canvasInputMode)
+    setDetectedCanvasInputMode(agentSettings.canvasInputMode)
+  }, [agentSettings.canvasInputMode])
 
   const setNodes = useCallback(
     (
@@ -2108,13 +2209,220 @@ function WorkspaceCanvasInner({
     [],
   )
 
-  const handleCanvasPointerDownCapture = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0 || !event.shiftKey) {
+  const selectNodesInDraftRect = useCallback(
+    (draft: SelectionDraftState) => {
+      const start = reactFlow.screenToFlowPosition({
+        x: draft.startX,
+        y: draft.startY,
+      })
+      const end = reactFlow.screenToFlowPosition({
+        x: draft.currentX,
+        y: draft.currentY,
+      })
+
+      const left = Math.min(start.x, end.x)
+      const right = Math.max(start.x, end.x)
+      const top = Math.min(start.y, end.y)
+      const bottom = Math.max(start.y, end.y)
+
+      const selectedAtStart = draft.additive
+        ? new Set(draft.selectedNodeIdsAtStart)
+        : new Set<string>()
+      const selectedIds: string[] = []
+
+      setNodes(
+        previousNodes => {
+          let hasChanged = false
+
+          const nextNodes = previousNodes.map(node => {
+            const nodeLeft = node.position.x
+            const nodeRight = node.position.x + node.data.width
+            const nodeTop = node.position.y
+            const nodeBottom = node.position.y + node.data.height
+            const intersects =
+              nodeLeft <= right && nodeRight >= left && nodeTop <= bottom && nodeBottom >= top
+            const isSelected = draft.additive
+              ? selectedAtStart.has(node.id) || intersects
+              : intersects
+
+            if (isSelected) {
+              selectedIds.push(node.id)
+            }
+
+            if (node.selected === isSelected) {
+              return node
+            }
+
+            hasChanged = true
+            return {
+              ...node,
+              selected: isSelected,
+            }
+          })
+
+          return hasChanged ? nextNodes : previousNodes
+        },
+        { syncLayout: false },
+      )
+
+      setSelectedNodeIds(selectedIds)
+    },
+    [reactFlow, setNodes],
+  )
+
+  const handlePaneClick = useCallback(
+    (_event: React.MouseEvent | MouseEvent) => {
+      clearNodeSelection()
+      setContextMenu(null)
+      setEmptySelectionPrompt(null)
+      setEditingSpaceId(null)
+      setSpaceRenameDraft('')
+    },
+    [clearNodeSelection],
+  )
+
+  const handleCanvasWheelCapture = useCallback(
+    (event: WheelEvent) => {
+      let effectiveMode = resolvedCanvasInputMode
+      const wheelTarget = resolveWheelTarget(event.target)
+
+      if (agentSettings.canvasInputMode === 'auto' && (wheelTarget === 'canvas' || event.ctrlKey)) {
+        const nextState = inferCanvasInputModalityFromWheel(inputModalityStateRef.current, {
+          deltaX: event.deltaX,
+          deltaY: event.deltaY,
+          deltaMode: event.deltaMode,
+          ctrlKey: event.ctrlKey,
+          timeStamp: event.timeStamp,
+        })
+
+        inputModalityStateRef.current = nextState
+        setDetectedCanvasInputMode(previous =>
+          previous === nextState.mode ? previous : nextState.mode,
+        )
+        effectiveMode = nextState.mode
+      }
+
+      if (effectiveMode !== 'trackpad') {
+        trackpadGestureLockRef.current = null
         return
       }
 
-      if (!(event.target instanceof Element) || !event.target.closest('.react-flow__pane')) {
+      const action = resolveWheelAction(event.ctrlKey)
+      const lockTimestamp = performance.now()
+      const activeLock = trackpadGestureLockRef.current
+      const previousLock =
+        activeLock !== null &&
+        lockTimestamp - activeLock.lastTimestamp <= TRACKPAD_GESTURE_LOCK_GAP_MS
+          ? activeLock
+          : null
+
+      if (activeLock !== null && previousLock === null) {
+        trackpadGestureLockRef.current = null
+      }
+
+      const canvasElement = canvasRef.current
+      const isEventFromCanvas =
+        canvasElement !== null &&
+        event.target instanceof Node &&
+        canvasElement.contains(event.target)
+      const canContinueCanvasLock =
+        previousLock !== null && previousLock.action === action && previousLock.target === 'canvas'
+
+      if (!isEventFromCanvas && !canContinueCanvasLock) {
+        return
+      }
+
+      const target = isEventFromCanvas ? wheelTarget : 'canvas'
+      const isContinuousGesture = previousLock !== null && previousLock.action === action
+      const lockedTarget = isContinuousGesture ? previousLock.target : target
+
+      trackpadGestureLockRef.current = {
+        action,
+        target: lockedTarget,
+        lastTimestamp: lockTimestamp,
+      }
+
+      if (lockedTarget !== 'canvas') {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      const currentViewport = viewportRef.current
+
+      if (action === 'pan') {
+        const nextViewport = {
+          x: currentViewport.x - event.deltaX * TRACKPAD_PAN_SCROLL_SPEED,
+          y: currentViewport.y - event.deltaY * TRACKPAD_PAN_SCROLL_SPEED,
+          zoom: currentViewport.zoom,
+        }
+
+        viewportRef.current = nextViewport
+        reactFlow.setViewport(nextViewport, { duration: 0 })
+        onViewportChange(nextViewport)
+        return
+      }
+
+      const zoomFactor = Math.exp(-event.deltaY * TRACKPAD_PINCH_SENSITIVITY)
+      const nextZoom = clampNumber(
+        currentViewport.zoom * zoomFactor,
+        MIN_CANVAS_ZOOM,
+        MAX_CANVAS_ZOOM,
+      )
+
+      if (Math.abs(nextZoom - currentViewport.zoom) < 0.0001) {
+        return
+      }
+
+      const canvasRect = canvasRef.current?.getBoundingClientRect()
+      const anchorLocalX =
+        canvasRect && Number.isFinite(canvasRect.left)
+          ? event.clientX - canvasRect.left
+          : event.clientX
+      const anchorLocalY =
+        canvasRect && Number.isFinite(canvasRect.top)
+          ? event.clientY - canvasRect.top
+          : event.clientY
+
+      const anchorFlow = {
+        x: (anchorLocalX - currentViewport.x) / currentViewport.zoom,
+        y: (anchorLocalY - currentViewport.y) / currentViewport.zoom,
+      }
+
+      const nextViewport = {
+        x: anchorLocalX - anchorFlow.x * nextZoom,
+        y: anchorLocalY - anchorFlow.y * nextZoom,
+        zoom: nextZoom,
+      }
+
+      viewportRef.current = nextViewport
+      reactFlow.setViewport(nextViewport, { duration: 0 })
+      onViewportChange(nextViewport)
+    },
+    [agentSettings.canvasInputMode, onViewportChange, reactFlow, resolvedCanvasInputMode],
+  )
+
+  const handleCanvasPointerDownCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const canStartBoxSelection =
+        isTrackpadCanvasMode || event.shiftKey || isShiftPressedRef.current
+      if (event.button !== 0 || !canStartBoxSelection) {
+        return
+      }
+
+      if (!(event.target instanceof Element)) {
+        return
+      }
+
+      if (event.target.closest('.react-flow__node')) {
+        return
+      }
+
+      if (
+        !event.target.closest('.react-flow__pane') &&
+        !event.target.closest('.react-flow__renderer')
+      ) {
         return
       }
 
@@ -2123,11 +2431,16 @@ function WorkspaceCanvasInner({
         startY: event.clientY,
         currentX: event.clientX,
         currentY: event.clientY,
+        additive: event.shiftKey || isShiftPressedRef.current,
+        selectedNodeIdsAtStart: reactFlow
+          .getNodes()
+          .filter(node => Boolean(node.selected))
+          .map(node => node.id),
       }
       setContextMenu(null)
       setEmptySelectionPrompt(null)
     },
-    [],
+    [isTrackpadCanvasMode, reactFlow],
   )
 
   const handleCanvasPointerMoveCapture = useCallback(
@@ -2157,13 +2470,10 @@ function WorkspaceCanvasInner({
     }
 
     window.requestAnimationFrame(() => {
-      const selectedCount = reactFlow.getNodes().filter(node => Boolean(node.selected)).length
-      if (selectedCount > 0) {
-        return
-      }
+      selectNodesInDraftRect(draft)
       setEmptySelectionPrompt(null)
     })
-  }, [reactFlow])
+  }, [selectNodesInDraftRect])
 
   const createSpaceFromSelectedNodes = useCallback(() => {
     const selectedIds = selectedNodeIdsRef.current
@@ -3098,11 +3408,14 @@ function WorkspaceCanvasInner({
   const taskTitleModelLabel = resolveTaskTitleModel(agentSettings) ?? 'default model'
   const handleViewportMoveEnd = useCallback(
     (_event: MouseEvent | TouchEvent | null, nextViewport: Viewport) => {
-      onViewportChange({
+      const normalizedViewport = {
         x: nextViewport.x,
         y: nextViewport.y,
         zoom: nextViewport.zoom,
-      })
+      }
+
+      viewportRef.current = normalizedViewport
+      onViewportChange(normalizedViewport)
     },
     [onViewportChange],
   )
@@ -3270,6 +3583,7 @@ function WorkspaceCanvasInner({
     <div
       ref={canvasRef}
       className="workspace-canvas"
+      data-canvas-input-mode={resolvedCanvasInputMode}
       onClick={() => {
         setContextMenu(null)
         setEmptySelectionPrompt(null)
@@ -3279,12 +3593,16 @@ function WorkspaceCanvasInner({
       onPointerDownCapture={handleCanvasPointerDownCapture}
       onPointerMoveCapture={handleCanvasPointerMoveCapture}
       onPointerUpCapture={handleCanvasPointerUpCapture}
+      onWheelCapture={event => {
+        handleCanvasWheelCapture(event.nativeEvent)
+      }}
     >
       <ReactFlow<Node<TerminalNodeData>, Edge>
         nodes={nodes}
         edges={taskAgentEdges}
         nodeTypes={nodeTypes}
         onNodesChange={applyChanges}
+        onPaneClick={handlePaneClick}
         onPaneContextMenu={handlePaneContextMenu}
         onNodeContextMenu={handleNodeContextMenu}
         onSelectionContextMenu={handleSelectionContextMenu}
@@ -3293,15 +3611,18 @@ function WorkspaceCanvasInner({
         selectionMode={SelectionMode.Partial}
         selectionKeyCode="Shift"
         multiSelectionKeyCode="Shift"
+        selectionOnDrag={isTrackpadCanvasMode || isShiftPressed}
         nodesDraggable
         elementsSelectable
-        zoomOnScroll
+        panOnDrag={isTrackpadCanvasMode ? false : !isShiftPressed}
+        zoomOnScroll={!isTrackpadCanvasMode}
         panOnScroll={false}
-        zoomOnPinch
+        panOnScrollMode={PanOnScrollMode.Free}
+        zoomOnPinch={!isTrackpadCanvasMode}
         zoomOnDoubleClick
         defaultViewport={viewport}
-        minZoom={0.1}
-        maxZoom={2}
+        minZoom={MIN_CANVAS_ZOOM}
+        maxZoom={MAX_CANVAS_ZOOM}
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} size={1} gap={24} color="#20324f" />

@@ -157,6 +157,7 @@ describe('workspace persistence', () => {
       taskTitleModel: 'gpt-5.2-codex',
       taskTagOptions: ['feature', 'bug'],
       normalizeZoomOnTerminalClick: false,
+      canvasInputMode: 'trackpad',
     })
 
     writePersistedState(persisted)
@@ -188,6 +189,7 @@ describe('workspace persistence', () => {
     expect(restored?.settings.taskTitleModel).toBe('gpt-5.2-codex')
     expect(restored?.settings.taskTagOptions).toEqual(['feature', 'bug'])
     expect(restored?.settings.normalizeZoomOnTerminalClick).toBe(false)
+    expect(restored?.settings.canvasInputMode).toBe('trackpad')
   })
 
   it('truncates oversized terminal scrollback', () => {
@@ -267,6 +269,7 @@ describe('workspace persistence', () => {
       'test',
     ])
     expect(restored?.settings.normalizeZoomOnTerminalClick).toBe(true)
+    expect(restored?.settings.canvasInputMode).toBe('auto')
   })
 
   it('fills missing workspace viewport fields for legacy payload', () => {

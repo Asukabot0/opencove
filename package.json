@@ -38,6 +38,7 @@
     "secret-check:staged": "node scripts/check-secrets-staged.mjs",
     "secrets:scan": "secretlint \"**/*\"",
     "line-check:staged": "node scripts/check-max-lines.mjs",
+    "pre-commit": "pnpm line-check:staged && pnpm secret-check:staged && pnpm lint:fix && pnpm format:check && pnpm check && pnpm test -- --run && pnpm test:e2e",
     "prepare": "husky"
   },
   "dependencies": {

@@ -37,6 +37,9 @@ test.describe('Settings', () => {
       await expect(
         window.locator('[data-testid="settings-normalize-zoom-on-terminal-click"]'),
       ).toBeVisible()
+      const canvasInputMode = window.locator('[data-testid="settings-canvas-input-mode"]')
+      await expect(canvasInputMode).toBeVisible()
+      await canvasInputMode.selectOption('trackpad')
 
       const defaultProvider = window.locator('#settings-default-provider')
       await expect(defaultProvider).toBeVisible()
@@ -111,6 +114,7 @@ test.describe('Settings', () => {
             taskTitleModel?: string
             taskTagOptions?: string[]
             normalizeZoomOnTerminalClick?: boolean
+            canvasInputMode?: string
           }
         }
 
@@ -126,6 +130,7 @@ test.describe('Settings', () => {
       expect(persistedSettings?.taskTagOptions).toContain('ops')
       expect(persistedSettings?.taskTagOptions).not.toContain('feature')
       expect(persistedSettings?.normalizeZoomOnTerminalClick).toBe(false)
+      expect(persistedSettings?.canvasInputMode).toBe('trackpad')
     } finally {
       await electronApp.close()
     }

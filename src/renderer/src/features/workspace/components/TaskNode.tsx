@@ -25,6 +25,19 @@ interface TaskNodeProps {
   onStatusChange: (status: TaskRuntimeStatus) => void
 }
 
+function shouldStopWheelPropagation(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return true
+  }
+
+  const canvas = target.closest('.workspace-canvas')
+  if (!(canvas instanceof HTMLElement)) {
+    return true
+  }
+
+  return canvas.dataset.canvasInputMode !== 'trackpad'
+}
+
 type ResizeAxis = 'horizontal' | 'vertical'
 
 const MIN_WIDTH = 320
@@ -233,7 +246,9 @@ export function TaskNode({
       className="task-node nowheel"
       style={style}
       onWheel={event => {
-        event.stopPropagation()
+        if (shouldStopWheelPropagation(event.currentTarget)) {
+          event.stopPropagation()
+        }
       }}
     >
       <Handle type="target" position={Position.Left} className="workspace-node-handle" />
