@@ -134,6 +134,7 @@ test.describe('Workspace Canvas - Persistence', () => {
       await expect(reloadedTerminal).toBeVisible()
       await expect(reloadedTerminal.locator('.xterm')).toBeVisible()
       await expect(reloadedTerminal).toContainText(token)
+      await expect(reloadedTerminal).not.toContainText('^[')
     } finally {
       await electronApp.close()
     }

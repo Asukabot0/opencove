@@ -189,7 +189,13 @@ export function TerminalNode({
       }
     }
 
+    let shouldForwardTerminalData = false
+
     const disposable = terminal.onData(data => {
+      if (!shouldForwardTerminalData) {
+        return
+      }
+
       void window.coveApi.pty.write({ sessionId, data })
     })
 
@@ -236,7 +242,11 @@ export function TerminalNode({
       }
 
       if (mergedSnapshot.length > 0) {
-        terminal.write(mergedSnapshot)
+        terminal.write(mergedSnapshot, () => {
+          shouldForwardTerminalData = true
+        })
+      } else {
+        shouldForwardTerminalData = true
       }
 
       scrollbackBufferRef.current.set(mergedSnapshot)
