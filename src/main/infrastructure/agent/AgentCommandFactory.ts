@@ -74,7 +74,7 @@ export function buildAgentLaunchCommand(input: BuildAgentLaunchCommandInput): Ag
   }
 
   if (input.mode === 'resume') {
-    const args = ['resume', '--no-alt-screen']
+    const args = ['resume']
 
     if (resumeSessionId) {
       args.push(resumeSessionId)
@@ -95,7 +95,7 @@ export function buildAgentLaunchCommand(input: BuildAgentLaunchCommandInput): Ag
     }
   }
 
-  const args = ['--full-auto', '--no-alt-screen']
+  const args = ['--full-auto']
 
   if (effectiveModel) {
     args.push('--model', effectiveModel)
