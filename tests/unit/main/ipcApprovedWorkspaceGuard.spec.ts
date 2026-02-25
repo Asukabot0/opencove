@@ -113,9 +113,8 @@ describe('IPC approved workspace guards', () => {
       const runtime = createPtyRuntimeMock()
       const store = createApprovedWorkspaceStoreMock({ isPathApproved: false })
 
-      const { registerAgentIpcHandlers } = await import(
-        '../../../src/main/modules/agent/ipc/register'
-      )
+      const { registerAgentIpcHandlers } =
+        await import('../../../src/main/modules/agent/ipc/register')
       registerAgentIpcHandlers(runtime, store)
 
       const launchHandler = handlers.get(IPC_CHANNELS.agentLaunch)
@@ -163,9 +162,8 @@ describe('IPC approved workspace guards', () => {
       const runtime = createPtyRuntimeMock()
       const store = createApprovedWorkspaceStoreMock({ isPathApproved: true })
 
-      const { registerAgentIpcHandlers } = await import(
-        '../../../src/main/modules/agent/ipc/register'
-      )
+      const { registerAgentIpcHandlers } =
+        await import('../../../src/main/modules/agent/ipc/register')
       registerAgentIpcHandlers(runtime, store)
 
       const launchHandler = handlers.get(IPC_CHANNELS.agentLaunch)
@@ -203,7 +201,8 @@ describe('IPC approved workspace guards', () => {
 
       const store = createApprovedWorkspaceStoreMock({ isPathApproved: false })
 
-      const { registerTaskIpcHandlers } = await import('../../../src/main/modules/task/ipc/register')
+      const { registerTaskIpcHandlers } =
+        await import('../../../src/main/modules/task/ipc/register')
       registerTaskIpcHandlers(store)
 
       const suggestHandler = handlers.get(IPC_CHANNELS.taskSuggestTitle)
@@ -246,7 +245,8 @@ describe('IPC approved workspace guards', () => {
 
       const store = createApprovedWorkspaceStoreMock({ isPathApproved: true })
 
-      const { registerTaskIpcHandlers } = await import('../../../src/main/modules/task/ipc/register')
+      const { registerTaskIpcHandlers } =
+        await import('../../../src/main/modules/task/ipc/register')
       registerTaskIpcHandlers(store)
 
       const suggestHandler = handlers.get(IPC_CHANNELS.taskSuggestTitle)
