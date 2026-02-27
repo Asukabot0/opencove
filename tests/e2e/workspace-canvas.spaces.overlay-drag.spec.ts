@@ -37,7 +37,7 @@ test.describe('Workspace Canvas - Spaces (Overlay & Drag)', () => {
               },
             },
           ],
-          activeSpaceId: 'space-layer',
+          activeSpaceId: null,
         },
       )
 
@@ -108,7 +108,7 @@ test.describe('Workspace Canvas - Spaces (Overlay & Drag)', () => {
               },
             },
           ],
-          activeSpaceId: 'space-drag',
+          activeSpaceId: null,
         },
       )
 
@@ -184,6 +184,9 @@ test.describe('Workspace Canvas - Spaces (Overlay & Drag)', () => {
         throw new Error('failed to read initial persisted space/node state')
       }
 
+      const terminals = window.locator('.terminal-node')
+      await expect(terminals).toHaveCount(1)
+
       const dragHandle = window.locator('[data-testid="workspace-space-drag-space-drag-top"]')
       await expect(dragHandle).toBeVisible()
 
@@ -192,7 +195,7 @@ test.describe('Workspace Canvas - Spaces (Overlay & Drag)', () => {
         throw new Error('space drag handle bounding box unavailable')
       }
 
-      const startX = handleBox.x + handleBox.width * 0.5
+      const startX = handleBox.x + handleBox.width * 0.9
       const startY = handleBox.y + handleBox.height * 0.5
       const dragDx = 160
       const dragDy = 110

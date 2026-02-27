@@ -28,7 +28,7 @@ test.describe('Workspace Canvas - Selection', () => {
       await expect(
         window.locator('[data-testid="workspace-empty-selection-create-space"]'),
       ).toHaveCount(0)
-      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText('Space: All')
+      await expect(window.locator('.workspace-space-switcher')).toHaveCount(0)
 
       const spaceCount = await window.evaluate(key => {
         const raw = window.localStorage.getItem(key)

@@ -74,8 +74,15 @@ export interface SpaceDragState {
   pointerId: number
   spaceId: string
   startFlow: Point
-  initialRect: WorkspaceSpaceRect | null
+  initialRect: WorkspaceSpaceRect
   initialNodePositions: Map<string, Point>
+  ownedBounds: { left: number; top: number; right: number; bottom: number } | null
+  handle:
+    | { kind: 'move' }
+    | {
+        kind: 'resize'
+        edges: Partial<Record<'top' | 'right' | 'bottom' | 'left', true>>
+      }
 }
 
 export type TrackpadGestureAction = 'pan' | 'pinch'

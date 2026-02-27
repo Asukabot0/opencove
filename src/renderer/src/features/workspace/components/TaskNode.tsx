@@ -278,7 +278,7 @@ export function TaskNode({
           ) : (
             <button
               type="button"
-              className="task-node__title task-node__title-button nodrag"
+              className="task-node__title task-node__title-button"
               data-testid="task-node-inline-title-trigger"
               onClick={event => {
                 event.stopPropagation()

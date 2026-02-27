@@ -151,29 +151,29 @@
 
 .workspace-space-region__drag-handle--top {
   top: -4px;
-  left: 8px;
-  right: 8px;
+  left: 0;
+  right: 0;
   height: 8px;
 }
 
 .workspace-space-region__drag-handle--right {
-  top: 8px;
+  top: 0;
   right: -4px;
-  bottom: 8px;
+  bottom: 0;
   width: 8px;
 }
 
 .workspace-space-region__drag-handle--bottom {
-  left: 8px;
-  right: 8px;
+  left: 0;
+  right: 0;
   bottom: -4px;
   height: 8px;
 }
 
 .workspace-space-region__drag-handle--left {
-  top: 8px;
+  top: 0;
   left: -4px;
-  bottom: 8px;
+  bottom: 0;
   width: 8px;
 }
 

@@ -324,17 +324,6 @@ export default function App(): React.JSX.Element {
     setProjectContextMenu,
   })
 
-  const activeSpaceName = useMemo(() => {
-    if (!activeWorkspace || !activeWorkspace.activeSpaceId) {
-      return 'All'
-    }
-
-    return (
-      activeWorkspace.spaces.find(space => space.id === activeWorkspace.activeSpaceId)?.name ??
-      'All'
-    )
-  }, [activeWorkspace])
-
   const handleSelectWorkspace = useCallback((workspaceId: string): void => {
     setActiveWorkspaceId(workspaceId)
     setFocusRequest(null)
@@ -369,7 +358,6 @@ export default function App(): React.JSX.Element {
         <Sidebar
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
-          activeSpaceName={activeSpaceName}
           activeProviderLabel={activeProviderLabel}
           activeProviderModel={activeProviderModel}
           persistNotice={persistNotice}

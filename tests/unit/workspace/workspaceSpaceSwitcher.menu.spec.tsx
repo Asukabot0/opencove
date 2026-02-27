@@ -25,8 +25,7 @@ describe('WorkspaceSpaceRegionsOverlay worktree menu', () => {
             hasExplicitRect: true,
           },
         ]}
-        activeSpaceId={null}
-        spaceDragOffset={null}
+        spaceFramePreview={null}
         handleSpaceDragHandlePointerDown={() => undefined}
         editingSpaceId={null}
         spaceRenameInputRef={{ current: null }}

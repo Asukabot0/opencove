@@ -1,13 +1,24 @@
 import { useCallback, useState } from 'react'
 import type { Node } from '@xyflow/react'
-import type { Point, TaskPriority, TerminalNodeData } from '../../../types'
-import { normalizeTaskTagSelection, toErrorMessage } from '../helpers'
+import type { Point, TaskPriority, TerminalNodeData, WorkspaceSpaceState } from '../../../types'
+import { normalizeTaskTagSelection, sanitizeSpaces, toErrorMessage } from '../helpers'
 import type { ContextMenuState, TaskCreatorState } from '../types'
+import { expandSpaceToFitOwnedNodesAndPushAway } from '../../../utils/spaceAutoResize'
+
+type SetNodes = (
+  updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
+  options?: { syncLayout?: boolean },
+) => void
 
 interface UseTaskCreatorParams {
   contextMenu: ContextMenuState | null
   setContextMenu: React.Dispatch<React.SetStateAction<ContextMenuState | null>>
   taskTagOptions: string[]
+  nodesRef: React.MutableRefObject<Node<TerminalNodeData>[]>
+  setNodes: SetNodes
+  spacesRef: React.MutableRefObject<WorkspaceSpaceState[]>
+  onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
+  onRequestPersistFlush?: () => void
   suggestTaskTitle: (
     requirement: string,
   ) => Promise<{ title: string; priority: TaskPriority; tags: string[] }>
@@ -25,6 +36,11 @@ export function useWorkspaceCanvasTaskCreator({
   contextMenu,
   setContextMenu,
   taskTagOptions,
+  nodesRef,
+  setNodes,
+  spacesRef,
+  onSpacesChange,
+  onRequestPersistFlush,
   suggestTaskTitle,
   createTaskNode,
 }: UseTaskCreatorParams): {
@@ -203,6 +219,79 @@ export function useWorkspaceCanvasTaskCreator({
         return
       }
 
+      const targetSpace =
+        spacesRef.current.find(space => {
+          if (!space.rect) {
+            return false
+          }
+
+          return (
+            taskCreator.anchor.x >= space.rect.x &&
+            taskCreator.anchor.x <= space.rect.x + space.rect.width &&
+            taskCreator.anchor.y >= space.rect.y &&
+            taskCreator.anchor.y <= space.rect.y + space.rect.height
+          )
+        }) ?? null
+
+      if (targetSpace) {
+        const nextSpaces = sanitizeSpaces(
+          spacesRef.current.map(space => {
+            const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
+
+            if (space.id !== targetSpace.id) {
+              return { ...space, nodeIds: filtered }
+            }
+
+            return { ...space, nodeIds: [...new Set([...filtered, created.id])] }
+          }),
+        )
+
+        const { spaces: pushedSpaces, nodePositionById } = expandSpaceToFitOwnedNodesAndPushAway({
+          targetSpaceId: targetSpace.id,
+          spaces: nextSpaces,
+          nodeRects: nodesRef.current.map(node => ({
+            id: node.id,
+            rect: {
+              x: node.position.x,
+              y: node.position.y,
+              width: node.data.width,
+              height: node.data.height,
+            },
+          })),
+          gap: 24,
+        })
+
+        if (nodePositionById.size > 0) {
+          setNodes(
+            prevNodes => {
+              let hasChanged = false
+              const next = prevNodes.map(node => {
+                const nextPosition = nodePositionById.get(node.id)
+                if (!nextPosition) {
+                  return node
+                }
+
+                if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+                  return node
+                }
+
+                hasChanged = true
+                return {
+                  ...node,
+                  position: nextPosition,
+                }
+              })
+
+              return hasChanged ? next : prevNodes
+            },
+            { syncLayout: false },
+          )
+        }
+
+        onSpacesChange(pushedSpaces)
+        onRequestPersistFlush?.()
+      }
+
       setTaskCreator(null)
     } catch (error) {
       setTaskCreator(prev =>
@@ -215,7 +304,17 @@ export function useWorkspaceCanvasTaskCreator({
           : prev,
       )
     }
-  }, [createTaskNode, suggestTaskTitle, taskCreator, taskTagOptions])
+  }, [
+    createTaskNode,
+    nodesRef,
+    onRequestPersistFlush,
+    onSpacesChange,
+    setNodes,
+    spacesRef,
+    suggestTaskTitle,
+    taskCreator,
+    taskTagOptions,
+  ])
 
   return {
     taskCreator,

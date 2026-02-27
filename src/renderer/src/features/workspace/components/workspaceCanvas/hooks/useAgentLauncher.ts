@@ -2,15 +2,26 @@ import { useCallback, useMemo, useState } from 'react'
 import type { Node } from '@xyflow/react'
 import { resolveAgentModel, type AgentSettings } from '../../../../settings/agentConfig'
 import type { AgentNodeData, Point, TerminalNodeData, WorkspaceSpaceState } from '../../../types'
-import { normalizeDirectoryPath, toErrorMessage, toSuggestedWorktreePath } from '../helpers'
+import {
+  normalizeDirectoryPath,
+  sanitizeSpaces,
+  toErrorMessage,
+  toSuggestedWorktreePath,
+} from '../helpers'
 import type { AgentLauncherState, ContextMenuState, CreateNodeInput } from '../types'
+import { expandSpaceToFitOwnedNodesAndPushAway } from '../../../utils/spaceAutoResize'
 
 interface UseAgentLauncherParams {
   agentSettings: AgentSettings
   workspacePath: string
-  activeSpaceId: string | null
+  nodesRef: React.MutableRefObject<Node<TerminalNodeData>[]>
+  setNodes: (
+    updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
+    options?: { syncLayout?: boolean },
+  ) => void
   spacesRef: React.MutableRefObject<WorkspaceSpaceState[]>
   onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
+  onRequestPersistFlush?: () => void
   contextMenu: ContextMenuState | null
   setContextMenu: (next: ContextMenuState | null) => void
   createNodeForSession: (input: CreateNodeInput) => Promise<Node<TerminalNodeData> | null>
@@ -23,9 +34,11 @@ interface UseAgentLauncherParams {
 export function useWorkspaceCanvasAgentLauncher({
   agentSettings,
   workspacePath,
-  activeSpaceId,
+  nodesRef,
+  setNodes,
   spacesRef,
   onSpacesChange,
+  onRequestPersistFlush,
   contextMenu,
   setContextMenu,
   createNodeForSession,
@@ -97,18 +110,28 @@ export function useWorkspaceCanvasAgentLauncher({
 
     const normalizedModel = agentLauncher.model.trim()
 
-    const activeSpace = activeSpaceId
-      ? (spacesRef.current.find(space => space.id === activeSpaceId) ?? null)
-      : null
+    const anchorSpace =
+      spacesRef.current.find(space => {
+        if (!space.rect) {
+          return false
+        }
 
-    const activeSpaceDirectory =
-      activeSpace && activeSpace.directoryPath.trim().length > 0
-        ? activeSpace.directoryPath
+        return (
+          agentLauncher.anchor.x >= space.rect.x &&
+          agentLauncher.anchor.x <= space.rect.x + space.rect.width &&
+          agentLauncher.anchor.y >= space.rect.y &&
+          agentLauncher.anchor.y <= space.rect.y + space.rect.height
+        )
+      }) ?? null
+
+    const anchorSpaceDirectory =
+      anchorSpace && anchorSpace.directoryPath.trim().length > 0
+        ? anchorSpace.directoryPath
         : workspacePath
 
     const executionDirectory =
       agentLauncher.directoryMode === 'workspace'
-        ? activeSpaceDirectory
+        ? anchorSpaceDirectory
         : normalizeDirectoryPath(workspacePath, agentLauncher.customDirectory)
 
     if (executionDirectory.trim().length === 0) {
@@ -158,7 +181,7 @@ export function useWorkspaceCanvasAgentLauncher({
         launchMode: launched.launchMode,
         resumeSessionId: launched.resumeSessionId,
         executionDirectory,
-        expectedDirectory: executionDirectory,
+        expectedDirectory: anchorSpace ? anchorSpaceDirectory : executionDirectory,
         directoryMode: agentLauncher.directoryMode,
         customDirectory:
           agentLauncher.directoryMode === 'custom' ? agentLauncher.customDirectory.trim() : null,
@@ -187,25 +210,70 @@ export function useWorkspaceCanvasAgentLauncher({
         return
       }
 
-      if (activeSpace) {
-        const targetSpace = activeSpace
-        const nextSpaces = spacesRef.current.map(space => {
-          const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
+      if (anchorSpace) {
+        const targetSpace = anchorSpace
+        const nextSpaces = sanitizeSpaces(
+          spacesRef.current.map(space => {
+            const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
 
-          if (space.id !== targetSpace.id) {
+            if (space.id !== targetSpace.id) {
+              return {
+                ...space,
+                nodeIds: filtered,
+              }
+            }
+
             return {
               ...space,
-              nodeIds: filtered,
+              nodeIds: [...new Set([...filtered, created.id])],
             }
-          }
+          }),
+        )
 
-          return {
-            ...space,
-            nodeIds: [...new Set([...filtered, created.id])],
-          }
+        const { spaces: pushedSpaces, nodePositionById } = expandSpaceToFitOwnedNodesAndPushAway({
+          targetSpaceId: targetSpace.id,
+          spaces: nextSpaces,
+          nodeRects: nodesRef.current.map(node => ({
+            id: node.id,
+            rect: {
+              x: node.position.x,
+              y: node.position.y,
+              width: node.data.width,
+              height: node.data.height,
+            },
+          })),
+          gap: 24,
         })
 
-        onSpacesChange(nextSpaces)
+        if (nodePositionById.size > 0) {
+          setNodes(
+            prevNodes => {
+              let hasChanged = false
+              const next = prevNodes.map(node => {
+                const nextPosition = nodePositionById.get(node.id)
+                if (!nextPosition) {
+                  return node
+                }
+
+                if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+                  return node
+                }
+
+                hasChanged = true
+                return {
+                  ...node,
+                  position: nextPosition,
+                }
+              })
+
+              return hasChanged ? next : prevNodes
+            },
+            { syncLayout: false },
+          )
+        }
+
+        onSpacesChange(pushedSpaces)
+        onRequestPersistFlush?.()
       }
 
       setAgentLauncher(null)
@@ -221,11 +289,13 @@ export function useWorkspaceCanvasAgentLauncher({
       )
     }
   }, [
-    activeSpaceId,
     agentLauncher,
     buildAgentNodeTitle,
     createNodeForSession,
+    nodesRef,
     onSpacesChange,
+    onRequestPersistFlush,
+    setNodes,
     spacesRef,
     workspacePath,
   ])

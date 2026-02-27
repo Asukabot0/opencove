@@ -7,7 +7,9 @@ import type {
   EmptySelectionPromptState,
   SelectionDraftState,
 } from '../types'
+import { sanitizeSpaces } from '../helpers'
 import { useWorkspaceCanvasSelectionDraft } from './useSelectionDraft'
+import { expandSpaceToFitOwnedNodesAndPushAway } from '../../../utils/spaceAutoResize'
 
 type SetNodes = (
   updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
@@ -27,7 +29,6 @@ interface UseWorkspaceCanvasInteractionsParams {
   selectedNodeIdsRef: React.MutableRefObject<string[]>
   contextMenu: ContextMenuState | null
   workspacePath: string
-  activeSpaceId: string | null
   spacesRef: React.MutableRefObject<WorkspaceSpaceState[]>
   onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
   nodesRef: React.MutableRefObject<Node<TerminalNodeData>[]>
@@ -47,7 +48,6 @@ export function useWorkspaceCanvasInteractions({
   selectedNodeIdsRef,
   contextMenu,
   workspacePath,
-  activeSpaceId,
   spacesRef,
   onSpacesChange,
   nodesRef,
@@ -199,13 +199,23 @@ export function useWorkspaceCanvasInteractions({
 
     setContextMenu(null)
 
-    const activeSpace = activeSpaceId
-      ? (spacesRef.current.find(space => space.id === activeSpaceId) ?? null)
-      : null
+    const targetSpace =
+      spacesRef.current.find(space => {
+        if (!space.rect) {
+          return false
+        }
+
+        return (
+          anchor.x >= space.rect.x &&
+          anchor.x <= space.rect.x + space.rect.width &&
+          anchor.y >= space.rect.y &&
+          anchor.y <= space.rect.y + space.rect.height
+        )
+      }) ?? null
 
     const resolvedCwd =
-      activeSpace && activeSpace.directoryPath.trim().length > 0
-        ? activeSpace.directoryPath
+      targetSpace && targetSpace.directoryPath.trim().length > 0
+        ? targetSpace.directoryPath
         : workspacePath
 
     const spawned = await window.coveApi.pty.spawn({
@@ -223,28 +233,72 @@ export function useWorkspaceCanvasInteractions({
       expectedDirectory: resolvedCwd,
     })
 
-    if (!created || !activeSpace) {
+    if (!created || !targetSpace) {
       return
     }
 
-    const nextSpaces = spacesRef.current.map(space => {
-      const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
+    const nextSpaces = sanitizeSpaces(
+      spacesRef.current.map(space => {
+        const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
 
-      if (space.id !== activeSpace.id) {
-        return { ...space, nodeIds: filtered }
-      }
+        if (space.id !== targetSpace.id) {
+          return { ...space, nodeIds: filtered }
+        }
 
-      return { ...space, nodeIds: [...new Set([...filtered, created.id])] }
+        return { ...space, nodeIds: [...new Set([...filtered, created.id])] }
+      }),
+    )
+
+    const { spaces: pushedSpaces, nodePositionById } = expandSpaceToFitOwnedNodesAndPushAway({
+      targetSpaceId: targetSpace.id,
+      spaces: nextSpaces,
+      nodeRects: nodesRef.current.map(node => ({
+        id: node.id,
+        rect: {
+          x: node.position.x,
+          y: node.position.y,
+          width: node.data.width,
+          height: node.data.height,
+        },
+      })),
+      gap: 24,
     })
 
-    onSpacesChange(nextSpaces)
+    if (nodePositionById.size > 0) {
+      setNodes(
+        prevNodes => {
+          let hasChanged = false
+          const next = prevNodes.map(node => {
+            const nextPosition = nodePositionById.get(node.id)
+            if (!nextPosition) {
+              return node
+            }
+
+            if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+              return node
+            }
+
+            hasChanged = true
+            return {
+              ...node,
+              position: nextPosition,
+            }
+          })
+
+          return hasChanged ? next : prevNodes
+        },
+        { syncLayout: false },
+      )
+    }
+
+    onSpacesChange(pushedSpaces)
   }, [
-    activeSpaceId,
     contextMenu,
     createNodeForSession,
     nodesRef,
     onSpacesChange,
     setContextMenu,
+    setNodes,
     spacesRef,
     workspacePath,
   ])

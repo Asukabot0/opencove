@@ -1,14 +1,14 @@
 import React from 'react'
 import { ViewportPortal } from '@xyflow/react'
+import type { WorkspaceSpaceRect } from '../../../types'
 import type { SpaceVisual } from '../types'
 
 interface WorkspaceSpaceRegionsOverlayProps {
   workspacePath: string
   spaceVisuals: SpaceVisual[]
-  activeSpaceId: string | null
-  spaceDragOffset: { spaceId: string; dx: number; dy: number } | null
+  spaceFramePreview: { spaceId: string; rect: WorkspaceSpaceRect } | null
   handleSpaceDragHandlePointerDown: (
-    event: React.PointerEvent<HTMLDivElement>,
+    event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
     spaceId: string,
   ) => void
   editingSpaceId: string | null
@@ -24,8 +24,7 @@ interface WorkspaceSpaceRegionsOverlayProps {
 export function WorkspaceSpaceRegionsOverlay({
   workspacePath,
   spaceVisuals,
-  activeSpaceId,
-  spaceDragOffset,
+  spaceFramePreview,
   handleSpaceDragHandlePointerDown,
   editingSpaceId,
   spaceRenameInputRef,
@@ -57,31 +56,26 @@ export function WorkspaceSpaceRegionsOverlay({
         const normalizedDirectoryPath = space.directoryPath.trim()
         const hasWorktreeDirectory =
           normalizedDirectoryPath.length > 0 && normalizedDirectoryPath !== workspacePath
+        const resolvedRect =
+          spaceFramePreview?.spaceId === space.id ? spaceFramePreview.rect : space.rect
 
         return (
           <div
             key={space.id}
-            className={`workspace-space-region${space.id === activeSpaceId ? ' workspace-space-region--active' : ''}`}
+            className="workspace-space-region"
             style={{
-              transform: `translate(${
-                space.rect.x +
-                (spaceDragOffset?.spaceId === space.id && space.hasExplicitRect
-                  ? spaceDragOffset.dx
-                  : 0)
-              }px, ${
-                space.rect.y +
-                (spaceDragOffset?.spaceId === space.id && space.hasExplicitRect
-                  ? spaceDragOffset.dy
-                  : 0)
-              }px)`,
-              width: space.rect.width,
-              height: space.rect.height,
+              transform: `translate(${resolvedRect.x}px, ${resolvedRect.y}px)`,
+              width: resolvedRect.width,
+              height: resolvedRect.height,
             }}
           >
             <div
               className="workspace-space-region__drag-handle workspace-space-region__drag-handle--top"
               data-testid={`workspace-space-drag-${space.id}-top`}
               onPointerDown={event => {
+                handleSpaceDragHandlePointerDown(event, space.id)
+              }}
+              onMouseDown={event => {
                 handleSpaceDragHandlePointerDown(event, space.id)
               }}
             />
@@ -91,6 +85,9 @@ export function WorkspaceSpaceRegionsOverlay({
               onPointerDown={event => {
                 handleSpaceDragHandlePointerDown(event, space.id)
               }}
+              onMouseDown={event => {
+                handleSpaceDragHandlePointerDown(event, space.id)
+              }}
             />
             <div
               className="workspace-space-region__drag-handle workspace-space-region__drag-handle--bottom"
@@ -98,11 +95,17 @@ export function WorkspaceSpaceRegionsOverlay({
               onPointerDown={event => {
                 handleSpaceDragHandlePointerDown(event, space.id)
               }}
+              onMouseDown={event => {
+                handleSpaceDragHandlePointerDown(event, space.id)
+              }}
             />
             <div
               className="workspace-space-region__drag-handle workspace-space-region__drag-handle--left"
               data-testid={`workspace-space-drag-${space.id}-left`}
               onPointerDown={event => {
+                handleSpaceDragHandlePointerDown(event, space.id)
+              }}
+              onMouseDown={event => {
                 handleSpaceDragHandlePointerDown(event, space.id)
               }}
             />

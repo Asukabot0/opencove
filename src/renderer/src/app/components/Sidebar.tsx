@@ -53,7 +53,6 @@ function resolveSidebarTaskStatusTone(taskStatus: SidebarTaskStatus): SidebarSta
 export function Sidebar({
   workspaces,
   activeWorkspaceId,
-  activeSpaceName,
   activeProviderLabel,
   activeProviderModel,
   persistNotice,
@@ -65,7 +64,6 @@ export function Sidebar({
 }: {
   workspaces: WorkspaceState[]
   activeWorkspaceId: string | null
-  activeSpaceName: string
   activeProviderLabel: string
   activeProviderModel: string
   persistNotice: PersistNotice | null
@@ -80,7 +78,6 @@ export function Sidebar({
       <div className="workspace-sidebar__header">
         <div className="workspace-sidebar__header-main">
           <h1>Projects</h1>
-          <span className="workspace-sidebar__space-label">Space: {activeSpaceName}</span>
         </div>
         <button
           type="button"

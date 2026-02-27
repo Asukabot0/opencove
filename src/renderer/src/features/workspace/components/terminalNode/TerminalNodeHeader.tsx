@@ -91,7 +91,7 @@ export function TerminalNodeHeader({
         ) : (
           <button
             type="button"
-            className="terminal-node__title terminal-node__title-button nodrag"
+            className="terminal-node__title terminal-node__title-button"
             data-testid="terminal-node-inline-title-trigger"
             onClick={event => {
               event.stopPropagation()

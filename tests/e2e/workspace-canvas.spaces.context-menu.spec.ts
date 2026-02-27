@@ -41,6 +41,40 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
     }
   })
 
+  test('does not offer right-click ownership transfer actions (drag-only membership)', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [
+        {
+          id: 'space-no-context-move-node',
+          title: 'terminal-space-no-context-move',
+          position: { x: 220, y: 180 },
+          width: 460,
+          height: 300,
+        },
+      ])
+
+      const terminalNode = window.locator('.terminal-node').first()
+      await expect(terminalNode).toBeVisible()
+
+      await terminalNode.click()
+      await terminalNode.click({ button: 'right' })
+      await window.locator('[data-testid="workspace-selection-create-space"]').click()
+
+      await terminalNode.click({ button: 'right' })
+      await expect(window.locator('[data-testid="workspace-selection-create-space"]')).toBeVisible()
+      await expect(window.locator('[data-testid^="workspace-selection-move-space-"]')).toHaveCount(
+        0,
+      )
+      await expect(window.locator('[data-testid="workspace-selection-remove-space"]')).toHaveCount(
+        0,
+      )
+    } finally {
+      await electronApp.close()
+    }
+  })
+
   test('removes empty selected-created space when all members are unassigned', async () => {
     const { electronApp, window } = await launchApp()
 
@@ -62,13 +96,28 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       await terminalNode.click({ button: 'right' })
       await window.locator('[data-testid="workspace-selection-create-space"]').click()
 
-      await expect(window.locator('.workspace-sidebar__space-label')).toContainText('Space')
+      await expect(window.locator('.workspace-space-switcher')).toHaveCount(1)
+      await expect(window.locator('.workspace-space-region')).toHaveCount(1)
 
-      await terminalNode.click({ button: 'right' })
-      await window.locator('[data-testid="workspace-selection-remove-space"]').click()
+      const header = terminalNode.locator('.terminal-node__header')
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
 
-      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText('Space: All')
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
+
+      await header.dragTo(pane, {
+        sourcePosition: { x: 80, y: 16 },
+        targetPosition: {
+          x: 120,
+          y: Math.max(160, paneBox.height - 120),
+        },
+      })
+
       await expect(window.locator('.workspace-space-switcher')).toHaveCount(0)
+      await expect(window.locator('.workspace-space-region')).toHaveCount(0)
 
       const spaceCount = await window.evaluate(key => {
         const raw = window.localStorage.getItem(key)
@@ -121,8 +170,10 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       await renameInput.fill('Infra Core')
       await renameInput.press('Enter')
 
-      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText(
-        'Space: Infra Core',
+      await expect(window.locator('.workspace-space-switcher__item--active')).toHaveCount(0)
+      await expect(window.locator('.workspace-space-region--active')).toHaveCount(0)
+      await expect(window.locator('.workspace-space-region__label').first()).toHaveText(
+        'Infra Core',
       )
       await expect(
         window.locator('.workspace-space-switcher__item', { hasText: 'Infra Core' }),
@@ -194,9 +245,8 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       }
 
       await window.locator('[data-testid="workspace-space-switch-space-focus"]').click()
-      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText(
-        'Space: Focus Scope',
-      )
+      await expect(window.locator('.workspace-space-switcher__item--active')).toHaveCount(0)
+      await expect(window.locator('.workspace-space-region--active')).toHaveCount(0)
 
       await expect
         .poll(async () => {
@@ -308,10 +358,12 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
       }
 
       await window.locator('[data-testid="workspace-space-switch-space-all-focus"]').click()
-      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText('Space: Deep Work')
+      await expect(window.locator('.workspace-space-switcher__item--active')).toHaveCount(0)
+      await expect(window.locator('.workspace-space-region--active')).toHaveCount(0)
 
       await window.locator('[data-testid="workspace-space-switch-all"]').click()
-      await expect(window.locator('.workspace-sidebar__space-label')).toHaveText('Space: All')
+      await expect(window.locator('.workspace-space-switcher__item--active')).toHaveCount(0)
+      await expect(window.locator('.workspace-space-region--active')).toHaveCount(0)
 
       const targetNodes = [
         { x: 120, y: 120, width: 460, height: 300 },

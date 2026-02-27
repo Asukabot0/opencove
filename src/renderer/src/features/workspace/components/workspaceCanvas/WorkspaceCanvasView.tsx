@@ -12,7 +12,7 @@ import {
   type NodeTypes,
   type Viewport,
 } from '@xyflow/react'
-import type { TerminalNodeData, WorkspaceSpaceState } from '../../types'
+import type { TerminalNodeData, WorkspaceSpaceRect, WorkspaceSpaceState } from '../../types'
 import { MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM } from './constants'
 import type {
   AgentLauncherState,
@@ -53,16 +53,21 @@ interface WorkspaceCanvasViewProps {
   onNodeContextMenu: (event: React.MouseEvent, node: Node<TerminalNodeData>) => void
   onSelectionContextMenu: (event: React.MouseEvent, selectedNodes: Node<TerminalNodeData>[]) => void
   onSelectionChange: (params: { nodes: Node<TerminalNodeData>[] }) => void
+  onNodeDragStop: (
+    event: React.MouseEvent,
+    node: Node<TerminalNodeData>,
+    nodes: Node<TerminalNodeData>[],
+  ) => void
+  onSelectionDragStop: (event: React.MouseEvent, nodes: Node<TerminalNodeData>[]) => void
   onMoveEnd: (_event: MouseEvent | TouchEvent | null, nextViewport: Viewport) => void
   viewport: Viewport
   isTrackpadCanvasMode: boolean
   isShiftPressed: boolean
 
   spaceVisuals: SpaceVisual[]
-  activeSpaceId: string | null
-  spaceDragOffset: { spaceId: string; dx: number; dy: number } | null
+  spaceFramePreview: { spaceId: string; rect: WorkspaceSpaceRect } | null
   handleSpaceDragHandlePointerDown: (
-    event: React.PointerEvent<HTMLDivElement>,
+    event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
     spaceId: string,
   ) => void
   editingSpaceId: string | null
@@ -81,7 +86,6 @@ interface WorkspaceCanvasViewProps {
   onMinimapVisibilityChange: (isVisible: boolean) => void
 
   spaces: WorkspaceSpaceState[]
-  onActiveSpaceChange: (spaceId: string | null) => void
   focusSpaceInViewport: (spaceId: string) => void
   focusAllInViewport: () => void
 
@@ -91,8 +95,6 @@ interface WorkspaceCanvasViewProps {
   openTaskCreator: () => void
   openAgentLauncher: () => void
   createSpaceFromSelectedNodes: () => void
-  moveSelectionToSpace: (spaceId: string) => void
-  removeSelectionFromSpaces: () => void
   clearNodeSelection: () => void
 
   taskCreator: TaskCreatorState | null
@@ -166,13 +168,14 @@ export function WorkspaceCanvasView({
   onNodeContextMenu,
   onSelectionContextMenu,
   onSelectionChange,
+  onNodeDragStop,
+  onSelectionDragStop,
   onMoveEnd,
   viewport,
   isTrackpadCanvasMode,
   isShiftPressed,
   spaceVisuals,
-  activeSpaceId,
-  spaceDragOffset,
+  spaceFramePreview,
   handleSpaceDragHandlePointerDown,
   editingSpaceId,
   spaceRenameInputRef,
@@ -187,7 +190,6 @@ export function WorkspaceCanvasView({
   setIsMinimapVisible,
   onMinimapVisibilityChange,
   spaces,
-  onActiveSpaceChange,
   focusSpaceInViewport,
   focusAllInViewport,
   contextMenu,
@@ -196,8 +198,6 @@ export function WorkspaceCanvasView({
   openTaskCreator,
   openAgentLauncher,
   createSpaceFromSelectedNodes,
-  moveSelectionToSpace,
-  removeSelectionFromSpaces,
   clearNodeSelection,
   taskCreator,
   taskTitleProviderLabel,
@@ -259,6 +259,8 @@ export function WorkspaceCanvasView({
         onNodeContextMenu={onNodeContextMenu}
         onSelectionContextMenu={onSelectionContextMenu}
         onSelectionChange={onSelectionChange}
+        onNodeDragStop={onNodeDragStop}
+        onSelectionDragStop={onSelectionDragStop}
         onMoveEnd={onMoveEnd}
         selectionMode={SelectionMode.Partial}
         selectionKeyCode={null}
@@ -281,8 +283,7 @@ export function WorkspaceCanvasView({
         <WorkspaceSpaceRegionsOverlay
           workspacePath={workspacePath}
           spaceVisuals={spaceVisuals}
-          activeSpaceId={activeSpaceId}
-          spaceDragOffset={spaceDragOffset}
+          spaceFramePreview={spaceFramePreview}
           handleSpaceDragHandlePointerDown={handleSpaceDragHandlePointerDown}
           editingSpaceId={editingSpaceId}
           spaceRenameInputRef={spaceRenameInputRef}
@@ -315,8 +316,6 @@ export function WorkspaceCanvasView({
 
       <WorkspaceSpaceSwitcher
         spaces={spaces}
-        activeSpaceId={activeSpaceId}
-        onActiveSpaceChange={onActiveSpaceChange}
         focusSpaceInViewport={focusSpaceInViewport}
         focusAllInViewport={focusAllInViewport}
         cancelSpaceRename={cancelSpaceRename}
@@ -324,15 +323,11 @@ export function WorkspaceCanvasView({
 
       <WorkspaceContextMenu
         contextMenu={contextMenu}
-        spaces={spaces}
-        activeSpaceId={activeSpaceId}
         closeContextMenu={closeContextMenu}
         createTerminalNode={createTerminalNode}
         openTaskCreator={openTaskCreator}
         openAgentLauncher={openAgentLauncher}
         createSpaceFromSelectedNodes={createSpaceFromSelectedNodes}
-        moveSelectionToSpace={moveSelectionToSpace}
-        removeSelectionFromSpaces={removeSelectionFromSpaces}
         clearNodeSelection={clearNodeSelection}
       />
 
