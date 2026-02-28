@@ -1,8 +1,9 @@
 import type { Node } from '@xyflow/react'
 import { resolveAgentModel, type AgentSettings } from '../../../../settings/agentConfig'
 import type { TerminalNodeData, WorkspaceSpaceState } from '../../../types'
-import { toErrorMessage } from '../helpers'
+import { sanitizeSpaces, toErrorMessage } from '../helpers'
 import type { CreateNodeInput } from '../types'
+import { expandSpaceToFitOwnedNodesAndPushAway } from '../../../utils/spaceAutoResize'
 
 interface TaskActionContext {
   nodesRef: React.MutableRefObject<Node<TerminalNodeData>[]>
@@ -21,6 +22,92 @@ interface TaskActionContext {
   agentSettings: AgentSettings
   workspacePath: string
   onRequestPersistFlush?: () => void
+}
+
+function assignNodeToTaskSpaceAndAutoResize({
+  taskNodeId,
+  assignedNodeId,
+  nodesRef,
+  spacesRef,
+  setNodes,
+  onSpacesChange,
+}: {
+  taskNodeId: string
+  assignedNodeId: string
+  nodesRef: React.MutableRefObject<Node<TerminalNodeData>[]>
+  spacesRef: React.MutableRefObject<WorkspaceSpaceState[]>
+  setNodes: (
+    updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
+    options?: { syncLayout?: boolean },
+  ) => void
+  onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
+}): void {
+  const taskSpace = spacesRef.current.find(space => space.nodeIds.includes(taskNodeId)) ?? null
+  if (!taskSpace) {
+    return
+  }
+
+  const nextSpaces = sanitizeSpaces(
+    spacesRef.current.map(space => {
+      const filtered = space.nodeIds.filter(nodeId => nodeId !== assignedNodeId)
+
+      if (space.id !== taskSpace.id) {
+        return {
+          ...space,
+          nodeIds: filtered,
+        }
+      }
+
+      return {
+        ...space,
+        nodeIds: [...new Set([...filtered, assignedNodeId])],
+      }
+    }),
+  )
+
+  const { spaces: pushedSpaces, nodePositionById } = expandSpaceToFitOwnedNodesAndPushAway({
+    targetSpaceId: taskSpace.id,
+    spaces: nextSpaces,
+    nodeRects: nodesRef.current.map(node => ({
+      id: node.id,
+      rect: {
+        x: node.position.x,
+        y: node.position.y,
+        width: node.data.width,
+        height: node.data.height,
+      },
+    })),
+    gap: 24,
+  })
+
+  if (nodePositionById.size > 0) {
+    setNodes(
+      prevNodes => {
+        let hasChanged = false
+        const next = prevNodes.map(node => {
+          const nextPosition = nodePositionById.get(node.id)
+          if (!nextPosition) {
+            return node
+          }
+
+          if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+            return node
+          }
+
+          hasChanged = true
+          return {
+            ...node,
+            position: nextPosition,
+          }
+        })
+
+        return hasChanged ? next : prevNodes
+      },
+      { syncLayout: false },
+    )
+  }
+
+  onSpacesChange(pushedSpaces)
 }
 
 export async function runTaskAgentAction(
@@ -73,25 +160,14 @@ export async function runTaskAgentAction(
     const linkedAgentNode = nodesRef.current.find(node => node.id === linkedAgentNodeId)
 
     if (linkedAgentNode && linkedAgentNode.data.kind === 'agent' && linkedAgentNode.data.agent) {
-      if (taskSpace) {
-        const nextSpaces = spacesRef.current.map(space => {
-          const filtered = space.nodeIds.filter(nodeId => nodeId !== linkedAgentNodeId)
-
-          if (space.id !== taskSpace.id) {
-            return {
-              ...space,
-              nodeIds: filtered,
-            }
-          }
-
-          return {
-            ...space,
-            nodeIds: [...new Set([...filtered, linkedAgentNodeId])],
-          }
-        })
-
-        onSpacesChange(nextSpaces)
-      }
+      assignNodeToTaskSpaceAndAutoResize({
+        taskNodeId,
+        assignedNodeId: linkedAgentNodeId,
+        nodesRef,
+        spacesRef,
+        setNodes,
+        onSpacesChange,
+      })
 
       const now = new Date().toISOString()
 
@@ -209,28 +285,14 @@ export async function runTaskAgentAction(
       return
     }
 
-    const taskSpaceForCreatedAgent = spacesRef.current.find(space =>
-      space.nodeIds.includes(taskNodeId),
-    )
-    if (taskSpaceForCreatedAgent) {
-      const nextSpaces = spacesRef.current.map(space => {
-        const filtered = space.nodeIds.filter(nodeId => nodeId !== createdAgentNode.id)
-
-        if (space.id !== taskSpaceForCreatedAgent.id) {
-          return {
-            ...space,
-            nodeIds: filtered,
-          }
-        }
-
-        return {
-          ...space,
-          nodeIds: [...new Set([...filtered, createdAgentNode.id])],
-        }
-      })
-
-      onSpacesChange(nextSpaces)
-    }
+    assignNodeToTaskSpaceAndAutoResize({
+      taskNodeId,
+      assignedNodeId: createdAgentNode.id,
+      nodesRef,
+      spacesRef,
+      setNodes,
+      onSpacesChange,
+    })
 
     const now = new Date().toISOString()
 
@@ -385,25 +447,14 @@ export async function resumeTaskAgentSessionAction(
       return
     }
 
-    if (taskSpace) {
-      const nextSpaces = spacesRef.current.map(space => {
-        const filtered = space.nodeIds.filter(nodeId => nodeId !== createdAgentNode.id)
-
-        if (space.id !== taskSpace.id) {
-          return {
-            ...space,
-            nodeIds: filtered,
-          }
-        }
-
-        return {
-          ...space,
-          nodeIds: [...new Set([...filtered, createdAgentNode.id])],
-        }
-      })
-
-      onSpacesChange(nextSpaces)
-    }
+    assignNodeToTaskSpaceAndAutoResize({
+      taskNodeId,
+      assignedNodeId: createdAgentNode.id,
+      nodesRef,
+      spacesRef,
+      setNodes,
+      onSpacesChange,
+    })
 
     const now = new Date().toISOString()
 
