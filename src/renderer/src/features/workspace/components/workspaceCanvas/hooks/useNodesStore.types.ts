@@ -7,6 +7,7 @@ export interface UseWorkspaceCanvasNodesStoreParams {
   nodes: Node<TerminalNodeData>[]
   spacesRef: React.MutableRefObject<WorkspaceSpaceState[]>
   onNodesChange: (nodes: Node<TerminalNodeData>[]) => void
+  onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
   onRequestPersistFlush?: () => void
   defaultTerminalWindowScalePercent: number
 }

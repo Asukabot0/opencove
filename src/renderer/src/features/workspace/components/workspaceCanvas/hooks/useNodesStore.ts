@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { Node } from '@xyflow/react'
 import type { Point, Size, TerminalNodeData, TaskPriority } from '../../../types'
 import { useScrollbackStore } from '../../../store/useScrollbackStore'
-import { clampSizeToNonOverlapping, findNearestFreePosition } from '../../../utils/collision'
+import { findNearestFreePosition } from '../../../utils/collision'
 import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
 import {
   MIN_SIZE,
@@ -11,8 +11,8 @@ import {
 } from '../constants'
 import type { CreateNodeInput } from '../types'
 import { removeNodeWithRelations } from './useNodesStore.closeNode'
-import { clampSizeToContainingSpace } from './useNodesStore.clampSizeToSpace'
 import { computePushBlockingWindowsRight } from './useNodesStore.pushBlockingWindowsRight'
+import { resolveWorkspaceLayoutAfterNodeResize } from './useNodesStore.resolveResizeLayout'
 import { resolveNodesPlacement } from './useNodesStore.resolvePlacement'
 import type {
   UseWorkspaceCanvasNodesStoreParams,
@@ -23,6 +23,7 @@ export function useWorkspaceCanvasNodesStore({
   nodes,
   spacesRef,
   onNodesChange,
+  onSpacesChange,
   onRequestPersistFlush,
   defaultTerminalWindowScalePercent,
 }: UseWorkspaceCanvasNodesStoreParams): UseWorkspaceCanvasNodesStoreResult {
@@ -104,34 +105,35 @@ export function useWorkspaceCanvasNodesStore({
         return
       }
 
-      const boundedSize = clampSizeToNonOverlapping(
-        node.position,
-        desiredSize,
-        MIN_SIZE,
-        nodesRef.current,
-        nodeId,
-      )
+      const resolveDimension = (value: number, fallback: number): number =>
+        typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : fallback
 
-      const boundedBySpace = clampSizeToContainingSpace({
+      const normalizedSize: Size = {
+        width: Math.max(MIN_SIZE.width, resolveDimension(desiredSize.width, node.data.width)),
+        height: Math.max(MIN_SIZE.height, resolveDimension(desiredSize.height, node.data.height)),
+      }
+
+      const resolved = resolveWorkspaceLayoutAfterNodeResize({
         nodeId,
-        position: node.position,
-        size: boundedSize,
-        minSize: MIN_SIZE,
+        desiredSize: normalizedSize,
+        nodes: nodesRef.current,
         spaces: spacesRef.current,
+        gap: 24,
       })
 
-      upsertNode({
-        ...node,
-        data: {
-          ...node.data,
-          width: boundedBySpace.width,
-          height: boundedBySpace.height,
-        },
-      })
+      if (!resolved) {
+        return
+      }
+
+      setNodes(() => resolved.nodes)
+
+      if (resolved.spaces !== spacesRef.current) {
+        onSpacesChange(resolved.spaces)
+      }
 
       onRequestPersistFlush?.()
     },
-    [onRequestPersistFlush, spacesRef, upsertNode],
+    [onRequestPersistFlush, onSpacesChange, setNodes, spacesRef],
   )
 
   const applyPendingScrollbacks = useCallback(

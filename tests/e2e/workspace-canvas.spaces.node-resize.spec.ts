@@ -7,7 +7,7 @@ import {
 } from './workspace-canvas.helpers'
 
 test.describe('Workspace Canvas - Spaces (Node Resize)', () => {
-  test('clamps terminal resize so it stays within its space bounds', async () => {
+  test('expands the space and pushes away root windows when resizing a node outward', async () => {
     const { electronApp, window } = await launchApp()
 
     try {
@@ -18,6 +18,24 @@ test.describe('Workspace Canvas - Spaces (Node Resize)', () => {
             id: 'space-resize-terminal',
             title: 'terminal-in-space',
             position: { x: 140, y: 140 },
+            width: 460,
+            height: 300,
+            kind: 'terminal',
+            status: null,
+            startedAt: null,
+            endedAt: null,
+            exitCode: null,
+            lastError: null,
+            scrollback: null,
+            executionDirectory: testWorkspacePath,
+            expectedDirectory: testWorkspacePath,
+            agent: null,
+            task: null,
+          },
+          {
+            id: 'root-blocking-resize',
+            title: 'root-blocking-resize',
+            position: { x: 740, y: 140 },
             width: 460,
             height: 300,
             kind: 'terminal',
@@ -47,7 +65,9 @@ test.describe('Workspace Canvas - Spaces (Node Resize)', () => {
         },
       )
 
-      const terminalNode = window.locator('.terminal-node').first()
+      const terminalNode = window
+        .locator('.terminal-node', { hasText: 'terminal-in-space' })
+        .first()
       await expect(terminalNode).toBeVisible()
 
       const rightResizer = terminalNode.locator('[data-testid="terminal-resizer-right"]')
@@ -59,7 +79,7 @@ test.describe('Workspace Canvas - Spaces (Node Resize)', () => {
       await window.mouse.move(rightBox.x + rightBox.width / 2, rightBox.y + rightBox.height / 2)
       await window.mouse.down()
       await window.mouse.move(
-        rightBox.x + rightBox.width / 2 + 1200,
+        rightBox.x + rightBox.width / 2 + 800,
         rightBox.y + rightBox.height / 2,
       )
       await window.mouse.up()
@@ -74,54 +94,129 @@ test.describe('Workspace Canvas - Spaces (Node Resize)', () => {
       await window.mouse.down()
       await window.mouse.move(
         bottomBox.x + bottomBox.width / 2,
-        bottomBox.y + bottomBox.height / 2 + 1200,
+        bottomBox.y + bottomBox.height / 2 + 360,
       )
       await window.mouse.up()
 
-      const result = await window.evaluate(async key => {
-        void key
+      const initialSpaceRect = { x: 100, y: 100, width: 600, height: 400 }
+      const initialMaxWidth = initialSpaceRect.x + initialSpaceRect.width - 140
+      const initialMaxHeight = initialSpaceRect.y + initialSpaceRect.height - 140
 
-        const raw = await window.coveApi.persistence.readWorkspaceStateRaw()
-        if (!raw) {
-          return null
-        }
+      await expect
+        .poll(
+          async () => {
+            return await window.evaluate(
+              async ({ key, maxWidth, maxHeight }) => {
+                void key
 
-        const parsed = JSON.parse(raw) as {
-          workspaces?: Array<{
-            nodes?: Array<{
-              id?: string
-              position?: { x?: number; y?: number }
-              width?: number
-              height?: number
-            }>
-            spaces?: Array<{
-              id?: string
-              rect?: { x?: number; y?: number; width?: number; height?: number } | null
-            }>
-          }>
-        }
+                const raw = await window.coveApi.persistence.readWorkspaceStateRaw()
+                if (!raw) {
+                  return null
+                }
 
-        const workspace = parsed.workspaces?.[0]
-        const node = (workspace?.nodes ?? []).find(item => item.id === 'space-resize-terminal')
-        const space = (workspace?.spaces ?? []).find(item => item.id === 'space-resize')
+                const parsed = JSON.parse(raw) as {
+                  workspaces?: Array<{
+                    nodes?: Array<{
+                      id?: string
+                      position?: { x?: number; y?: number }
+                      width?: number
+                      height?: number
+                    }>
+                    spaces?: Array<{
+                      id?: string
+                      rect?: { x?: number; y?: number; width?: number; height?: number } | null
+                    }>
+                  }>
+                }
 
-        return { node, rect: space?.rect ?? null }
-      }, storageKey)
+                const workspace = parsed.workspaces?.[0]
+                const node = (workspace?.nodes ?? []).find(
+                  item => item.id === 'space-resize-terminal',
+                )
+                const root = (workspace?.nodes ?? []).find(
+                  item => item.id === 'root-blocking-resize',
+                )
+                const rect =
+                  (workspace?.spaces ?? []).find(item => item.id === 'space-resize')?.rect ?? null
 
-      expect(result).toBeTruthy()
+                if (
+                  !node?.position ||
+                  typeof node.position.x !== 'number' ||
+                  typeof node.position.y !== 'number' ||
+                  typeof node.width !== 'number' ||
+                  typeof node.height !== 'number' ||
+                  !root?.position ||
+                  typeof root.position.x !== 'number' ||
+                  !rect ||
+                  typeof rect.x !== 'number' ||
+                  typeof rect.y !== 'number' ||
+                  typeof rect.width !== 'number' ||
+                  typeof rect.height !== 'number'
+                ) {
+                  return null
+                }
 
-      const node = result?.node
-      const rect = result?.rect
+                const nodeRight = node.position.x + node.width
+                const nodeBottom = node.position.y + node.height
+                const spaceRight = rect.x + rect.width
+                const spaceBottom = rect.y + rect.height
 
-      expect(node?.position?.x).toBe(140)
-      expect(node?.position?.y).toBe(140)
-      expect(rect).toEqual({ x: 100, y: 100, width: 600, height: 400 })
+                const spaceExpanded = rect.width > 600 && rect.height > 400
+                const nodeNotClamped =
+                  node.width > maxWidth && node.height > maxHeight && node.width > 460
 
-      const maxWidth = 100 + 600 - 140
-      const maxHeight = 100 + 400 - 140
+                const nodeInsideSpace =
+                  node.position.x >= rect.x &&
+                  node.position.y >= rect.y &&
+                  nodeRight <= spaceRight &&
+                  nodeBottom <= spaceBottom
 
-      expect((node?.width ?? 0) <= maxWidth).toBe(true)
-      expect((node?.height ?? 0) <= maxHeight).toBe(true)
+                const rootPushed = root.position.x >= spaceRight + 24
+
+                const ok =
+                  node.position.x === 140 &&
+                  node.position.y === 140 &&
+                  spaceExpanded &&
+                  nodeNotClamped &&
+                  nodeInsideSpace &&
+                  rootPushed
+
+                return {
+                  ok,
+                  node: {
+                    x: node.position.x,
+                    y: node.position.y,
+                    width: node.width,
+                    height: node.height,
+                    right: nodeRight,
+                    bottom: nodeBottom,
+                  },
+                  space: {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                    right: spaceRight,
+                    bottom: spaceBottom,
+                  },
+                  root: {
+                    x: root.position.x,
+                    y: root.position.y,
+                  },
+                  checks: {
+                    spaceExpanded,
+                    nodeNotClamped,
+                    nodeInsideSpace,
+                    rootPushed,
+                  },
+                }
+              },
+              { key: storageKey, maxWidth: initialMaxWidth, maxHeight: initialMaxHeight },
+            )
+          },
+          { timeout: 10_000 },
+        )
+        .toEqual(expect.objectContaining({ ok: true }))
     } finally {
       await electronApp.close()
     }

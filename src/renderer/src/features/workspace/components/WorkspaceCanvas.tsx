@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { ReactFlowProvider, useReactFlow, type Edge, type Node, type Viewport } from '@xyflow/react'
 import {
   AGENT_PROVIDER_LABEL,
@@ -33,6 +33,8 @@ import { useWorkspaceCanvasSpaceDrag } from './workspaceCanvas/hooks/useSpaceDra
 import { useWorkspaceCanvasSpaceDirectoryOps } from './workspaceCanvas/hooks/useSpaceDirectoryOps'
 import { useWorkspaceCanvasSpaceOwnership } from './workspaceCanvas/hooks/useSpaceOwnership'
 import { useWorkspaceCanvasSpaces } from './workspaceCanvas/hooks/useSpaces'
+import { useWorkspaceCanvasSelectNode } from './workspaceCanvas/hooks/useSelectNode'
+import { useWorkspaceCanvasViewportMoveEnd } from './workspaceCanvas/hooks/useViewportMoveEnd'
 import { useWorkspaceCanvasNodeTypes } from './workspaceCanvas/nodeTypes'
 import { WorkspaceCanvasView } from './workspaceCanvas/WorkspaceCanvasView'
 import { resolveWorkspaceMinimapNodeColor } from './workspaceCanvas/minimap'
@@ -99,6 +101,7 @@ function WorkspaceCanvasInner({
     nodes,
     spacesRef,
     onNodesChange,
+    onSpacesChange,
     onRequestPersistFlush,
     defaultTerminalWindowScalePercent: agentSettings.defaultTerminalWindowScalePercent,
   })
@@ -322,44 +325,7 @@ function WorkspaceCanvasInner({
 
   useWorkspaceCanvasPtyTaskCompletion({ setNodes })
 
-  const selectNode = useCallback(
-    (nodeId: string) => {
-      setNodes(
-        prevNodes => {
-          const isAlreadySelected = prevNodes.some(node => node.id === nodeId && node.selected)
-          if (isAlreadySelected) {
-            return prevNodes
-          }
-
-          let hasChanged = false
-          const nextNodes = prevNodes.map(node => {
-            const shouldSelect = node.id === nodeId
-            if (node.selected === shouldSelect) {
-              return node
-            }
-
-            hasChanged = true
-            return {
-              ...node,
-              selected: shouldSelect,
-            }
-          })
-
-          return hasChanged ? nextNodes : prevNodes
-        },
-        { syncLayout: false },
-      )
-
-      setSelectedNodeIds(previous => {
-        if (previous.includes(nodeId)) {
-          return previous
-        }
-
-        return [nodeId]
-      })
-    },
-    [setNodes],
-  )
+  const selectNode = useWorkspaceCanvasSelectNode({ setNodes, setSelectedNodeIds })
 
   const nodeTypes = useWorkspaceCanvasNodeTypes({
     nodesRef,
@@ -410,19 +376,7 @@ function WorkspaceCanvasInner({
 
   const taskTitleProviderLabel = AGENT_PROVIDER_LABEL[resolveTaskTitleProvider(agentSettings)],
     taskTitleModelLabel = resolveTaskTitleModel(agentSettings) ?? 'default model'
-  const handleViewportMoveEnd = useCallback(
-    (_event: MouseEvent | TouchEvent | null, nextViewport: Viewport) => {
-      const normalizedViewport = {
-        x: nextViewport.x,
-        y: nextViewport.y,
-        zoom: nextViewport.zoom,
-      }
-
-      viewportRef.current = normalizedViewport
-      onViewportChange(normalizedViewport)
-    },
-    [onViewportChange],
-  )
+  const handleViewportMoveEnd = useWorkspaceCanvasViewportMoveEnd({ viewportRef, onViewportChange })
   const minimapNodeColor = resolveWorkspaceMinimapNodeColor
 
   const { taskAssignerAgentOptions, activeTaskForAssigner } = useWorkspaceCanvasTaskAssignerOptions(
