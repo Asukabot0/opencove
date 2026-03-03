@@ -280,31 +280,13 @@
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
-@keyframes workspace-node-selected-glow {
-  0% {
-    box-shadow:
-      0 0 0 1px rgba(152, 221, 255, 0.38),
-      0 12px 30px rgba(0, 0, 0, 0.5),
-      0 0 12px rgba(118, 203, 255, 0.25);
-  }
-  50% {
-    box-shadow:
-      0 0 0 1px rgba(168, 233, 255, 0.56),
-      0 16px 34px rgba(0, 0, 0, 0.52),
-      0 0 24px rgba(132, 214, 255, 0.4);
-  }
-  100% {
-    box-shadow:
-      0 0 0 1px rgba(152, 221, 255, 0.38),
-      0 12px 30px rgba(0, 0, 0, 0.5),
-      0 0 12px rgba(118, 203, 255, 0.25);
-  }
-}
-
 .workspace-canvas .react-flow__node.selected .terminal-node,
 .workspace-canvas .react-flow__node.selected .task-node {
   border-color: rgba(153, 223, 255, 0.9);
-  animation: workspace-node-selected-glow 1.8s ease-in-out infinite;
+  box-shadow:
+    0 0 0 1px rgba(168, 233, 255, 0.56),
+    0 16px 34px rgba(0, 0, 0, 0.52),
+    0 0 24px rgba(132, 214, 255, 0.4);
 }
 
 .workspace-agent-launcher-backdrop {
