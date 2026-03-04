@@ -109,10 +109,10 @@ export function NoteNode({
   }, [height, isResizing, onResize, width])
 
   const renderedSize = draftSize ?? { width, height }
-  const style = useMemo(() => ({ width: renderedSize.width, height: renderedSize.height }), [
-    renderedSize.height,
-    renderedSize.width,
-  ])
+  const style = useMemo(
+    () => ({ width: renderedSize.width, height: renderedSize.height }),
+    [renderedSize.height, renderedSize.width],
+  )
 
   return (
     <div
@@ -178,4 +178,3 @@ export function NoteNode({
     </div>
   )
 }
-

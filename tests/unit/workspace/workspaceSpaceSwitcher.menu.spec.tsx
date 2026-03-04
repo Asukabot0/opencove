@@ -94,7 +94,9 @@ describe('WorkspaceSpaceRegionsOverlay worktree menu', () => {
       />,
     )
 
-    expect(screen.getByTestId('workspace-space-worktree-name-space-1')).toHaveTextContent('wt-infra')
+    expect(screen.getByTestId('workspace-space-worktree-name-space-1')).toHaveTextContent(
+      'wt-infra',
+    )
 
     await waitFor(() => {
       expect(listWorktrees).toHaveBeenCalledWith({ repoPath: '/tmp/repo' })

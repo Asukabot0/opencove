@@ -38,7 +38,8 @@ test.describe('Workspace Canvas - Notes (Double Click Create)', () => {
               }>
             }
 
-            const noteNode = parsed.workspaces?.[0]?.nodes?.find(node => node.kind === 'note') ?? null
+            const noteNode =
+              parsed.workspaces?.[0]?.nodes?.find(node => node.kind === 'note') ?? null
             return noteNode?.task?.text ?? null
           })
         })

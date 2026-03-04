@@ -38,12 +38,12 @@ import { SpaceWorktreeWindow } from './windows/SpaceWorktreeWindow'
 interface WorkspaceCanvasViewProps {
   canvasRef: React.RefObject<HTMLDivElement>
   resolvedCanvasInputMode: string
-	  onCanvasClick: () => void
-	  handleCanvasPointerDownCapture: React.PointerEventHandler<HTMLDivElement>
-	  handleCanvasPointerMoveCapture: React.PointerEventHandler<HTMLDivElement>
-	  handleCanvasPointerUpCapture: React.PointerEventHandler<HTMLDivElement>
-	  handleCanvasDoubleClickCapture: React.MouseEventHandler<HTMLDivElement>
-	  handleCanvasWheelCapture: (event: WheelEvent) => void
+  onCanvasClick: () => void
+  handleCanvasPointerDownCapture: React.PointerEventHandler<HTMLDivElement>
+  handleCanvasPointerMoveCapture: React.PointerEventHandler<HTMLDivElement>
+  handleCanvasPointerUpCapture: React.PointerEventHandler<HTMLDivElement>
+  handleCanvasDoubleClickCapture: React.MouseEventHandler<HTMLDivElement>
+  handleCanvasWheelCapture: (event: WheelEvent) => void
 
   nodes: Node<TerminalNodeData>[]
   edges: Edge[]
@@ -283,14 +283,14 @@ export function WorkspaceCanvasView({
         elementsSelectable
         panOnDrag={isTrackpadCanvasMode ? false : !isShiftPressed}
         zoomOnScroll={!isTrackpadCanvasMode}
-	        panOnScroll={false}
-	        panOnScrollMode={PanOnScrollMode.Free}
-	        zoomOnPinch={!isTrackpadCanvasMode}
-	        zoomOnDoubleClick={false}
-	        defaultViewport={viewport}
-	        minZoom={MIN_CANVAS_ZOOM}
-	        maxZoom={MAX_CANVAS_ZOOM}
-	        proOptions={{ hideAttribution: true }}
+        panOnScroll={false}
+        panOnScrollMode={PanOnScrollMode.Free}
+        zoomOnPinch={!isTrackpadCanvasMode}
+        zoomOnDoubleClick={false}
+        defaultViewport={viewport}
+        minZoom={MIN_CANVAS_ZOOM}
+        maxZoom={MAX_CANVAS_ZOOM}
+        proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} size={1} gap={24} color="#20324f" />
         <WorkspaceSpaceRegionsOverlay

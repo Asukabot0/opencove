@@ -61,9 +61,9 @@ export function WorkspaceSpaceRegionsOverlay({
     [worktreeDirectories],
   )
 
-  const [worktreeInfoByPath, setWorktreeInfoByPath] = React.useState<
-    Map<string, GitWorktreeInfo>
-  >(() => new Map())
+  const [worktreeInfoByPath, setWorktreeInfoByPath] = React.useState<Map<string, GitWorktreeInfo>>(
+    () => new Map(),
+  )
 
   React.useEffect(() => {
     if (worktreeDirectories.length === 0) {
@@ -123,7 +123,9 @@ export function WorkspaceSpaceRegionsOverlay({
 
         const resolvedBranchLabel = resolvedWorktreeInfo
           ? (resolvedWorktreeInfo.branch ??
-            (resolvedWorktreeInfo.head ? `detached@${toShortSha(resolvedWorktreeInfo.head)}` : null))
+            (resolvedWorktreeInfo.head
+              ? `detached@${toShortSha(resolvedWorktreeInfo.head)}`
+              : null))
           : null
 
         return (
@@ -244,7 +246,8 @@ export function WorkspaceSpaceRegionsOverlay({
                         data-testid={`workspace-space-worktree-branch-${space.id}`}
                         title={
                           resolvedWorktreeInfo?.branch ??
-                          (resolvedWorktreeInfo?.head ?? 'Detached HEAD')
+                          resolvedWorktreeInfo?.head ??
+                          'Detached HEAD'
                         }
                       >
                         {resolvedBranchLabel}
