@@ -171,6 +171,7 @@ describe('WorkspaceCanvas terminal title mode', () => {
           scrollback: null,
           agent: null,
           task: null,
+          note: null,
         },
         draggable: true,
         selectable: true,

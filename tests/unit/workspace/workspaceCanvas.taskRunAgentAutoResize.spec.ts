@@ -113,6 +113,7 @@ describe('WorkspaceCanvas task run agent auto resize', () => {
             scrollback: null,
             agent: input.agent ?? null,
             task: null,
+            note: null,
           },
           draggable: true,
           selectable: true,

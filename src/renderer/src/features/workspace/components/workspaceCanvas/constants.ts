@@ -28,6 +28,11 @@ export const DEFAULT_TASK_WINDOW_MAX_SIZE: Size = {
   height: 920,
 }
 
+export const DEFAULT_NOTE_WINDOW_SIZE: Size = {
+  width: 420,
+  height: 280,
+}
+
 export const DEFAULT_TERMINAL_WINDOW_MAX_SIZE: Size = {
   width: Math.round(
     (DEFAULT_TERMINAL_WINDOW_BASE_SIZE.width * MAX_DEFAULT_TERMINAL_WINDOW_SCALE_PERCENT) / 100,

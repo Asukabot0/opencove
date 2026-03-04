@@ -6,5 +6,6 @@
 @import './styles/workspace-overlays.css';
 @import './styles/terminal-node.css';
 @import './styles/task-node.css';
+@import './styles/note-node.css';
 @import './styles/settings-panel.css';
 @import './styles/cove-window.css';

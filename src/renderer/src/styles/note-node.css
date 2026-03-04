@@ -1,0 +1,74 @@
+.note-node {
+  border-radius: 14px;
+  border: 1px solid rgba(107, 138, 236, 0.65);
+  background: rgba(10, 17, 33, 0.94);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
+.note-node__header {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 7px;
+  background: rgba(23, 36, 66, 0.96);
+  border-bottom: 1px solid rgba(104, 137, 226, 0.45);
+  cursor: grab;
+}
+
+.note-node__header:active {
+  cursor: grabbing;
+}
+
+.note-node__title {
+  font-size: calc(12px * var(--cove-ui-font-scale));
+  color: #d6e6ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-node__close {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(104, 137, 219, 0.42);
+  background: rgba(17, 30, 56, 0.82);
+  color: #c6dafb;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+  font-size: calc(15px * var(--cove-ui-font-scale));
+  line-height: 1;
+}
+
+.note-node__close:hover {
+  background: rgba(35, 54, 93, 0.94);
+  border-color: rgba(138, 173, 255, 0.55);
+  color: #eff6ff;
+}
+
+.note-node__textarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 10px;
+  background: transparent;
+  color: #dbe7ff;
+  font-size: calc(12px * var(--cove-ui-font-scale));
+  line-height: 1.45;
+  font-family: inherit;
+}

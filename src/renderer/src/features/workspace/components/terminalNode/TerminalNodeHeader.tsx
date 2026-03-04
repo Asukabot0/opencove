@@ -41,67 +41,52 @@ export function TerminalNodeHeader({
     const normalizedTitle = titleDraft.trim()
     if (normalizedTitle.length === 0) {
       setTitleDraft(title)
-      setIsTitleEditing(false)
       return
     }
 
     if (normalizedTitle !== title) {
       onTitleCommit(normalizedTitle)
     }
-
-    setIsTitleEditing(false)
   }, [isTitleEditable, onTitleCommit, title, titleDraft])
 
   const cancelTitleEdit = useCallback(() => {
     setTitleDraft(title)
-    setIsTitleEditing(false)
   }, [title])
 
   return (
     <div className="terminal-node__header" data-node-drag-handle="true">
       {isTitleEditable ? (
-        isTitleEditing ? (
-          <input
-            className="terminal-node__title terminal-node__title-input nodrag nowheel"
-            data-testid="terminal-node-inline-title-input"
-            value={titleDraft}
-            autoFocus
-            onPointerDown={event => {
-              event.stopPropagation()
-            }}
-            onChange={event => {
-              setTitleDraft(event.target.value)
-            }}
-            onBlur={() => {
-              commitTitleEdit()
-            }}
-            onKeyDown={event => {
-              if (event.key === 'Escape') {
-                event.preventDefault()
-                cancelTitleEdit()
-                return
-              }
+        <input
+          className="terminal-node__title terminal-node__title-input nodrag nowheel"
+          data-testid="terminal-node-inline-title-input"
+          value={titleDraft}
+          onFocus={() => {
+            setIsTitleEditing(true)
+          }}
+          onPointerDown={event => {
+            event.stopPropagation()
+          }}
+          onChange={event => {
+            setTitleDraft(event.target.value)
+          }}
+          onBlur={() => {
+            commitTitleEdit()
+            setIsTitleEditing(false)
+          }}
+          onKeyDown={event => {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              cancelTitleEdit()
+              event.currentTarget.blur()
+              return
+            }
 
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                commitTitleEdit()
-              }
-            }}
-          />
-        ) : (
-          <button
-            type="button"
-            className="terminal-node__title terminal-node__title-button"
-            data-testid="terminal-node-inline-title-trigger"
-            onClick={event => {
-              event.stopPropagation()
-              setTitleDraft(title)
-              setIsTitleEditing(true)
-            }}
-          >
-            {title}
-          </button>
-        )
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              event.currentTarget.blur()
+            }
+          }}
+        />
       ) : (
         <span className="terminal-node__title">{title}</span>
       )}

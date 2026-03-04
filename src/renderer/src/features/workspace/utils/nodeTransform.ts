@@ -4,7 +4,7 @@ import type { PersistedWorkspaceState, TerminalNodeData } from '../types'
 export function toRuntimeNodes(workspace: PersistedWorkspaceState): Node<TerminalNodeData>[] {
   return workspace.nodes.map(node => ({
     id: node.id,
-    type: node.kind === 'task' ? 'taskNode' : 'terminalNode',
+    type: node.kind === 'task' ? 'taskNode' : node.kind === 'note' ? 'noteNode' : 'terminalNode',
     position: node.position,
     data: {
       sessionId: '',
@@ -34,6 +34,7 @@ export function toRuntimeNodes(workspace: PersistedWorkspaceState): Node<Termina
               updatedAt: null,
             })
           : null,
+      note: node.kind === 'note' ? (node.task ?? { text: '' }) : null,
     },
     draggable: true,
     selectable: true,

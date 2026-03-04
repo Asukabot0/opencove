@@ -1,5 +1,6 @@
 import type {
   AgentNodeData,
+  NoteNodeData,
   PersistedTerminalNode,
   PersistedWorkspaceState,
   TaskAgentSessionRecord,
@@ -158,6 +159,19 @@ function ensurePersistedTaskData(value: unknown): TaskNodeData | null {
   }
 }
 
+function ensurePersistedNoteData(value: unknown): NoteNodeData | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const text = typeof record.text === 'string' ? record.text : ''
+
+  return {
+    text,
+  }
+}
+
 function ensurePersistedNode(node: unknown): PersistedTerminalNode | null {
   if (!node || typeof node !== 'object') {
     return null
@@ -189,6 +203,7 @@ function ensurePersistedNode(node: unknown): PersistedTerminalNode | null {
   const kind = normalizeNodeKind(record.kind)
   const agent = ensurePersistedAgentData(record.agent)
   const task = ensurePersistedTaskData(record.task)
+  const note = ensurePersistedNoteData(record.task)
 
   return {
     id,
@@ -206,7 +221,7 @@ function ensurePersistedNode(node: unknown): PersistedTerminalNode | null {
     executionDirectory: normalizeOptionalString(record.executionDirectory),
     expectedDirectory: normalizeOptionalString(record.expectedDirectory),
     agent: kind === 'agent' ? agent : null,
-    task: kind === 'task' ? task : null,
+    task: kind === 'task' ? task : kind === 'note' ? note : null,
     position: {
       x: positionRecord.x,
       y: positionRecord.y,

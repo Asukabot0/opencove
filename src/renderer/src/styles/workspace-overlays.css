@@ -316,7 +316,8 @@
 }
 
 .workspace-canvas .react-flow__node.selected .terminal-node,
-.workspace-canvas .react-flow__node.selected .task-node {
+.workspace-canvas .react-flow__node.selected .task-node,
+.workspace-canvas .react-flow__node.selected .note-node {
   border-color: rgba(153, 223, 255, 0.9);
   box-shadow:
     0 0 0 1px rgba(168, 233, 255, 0.56),

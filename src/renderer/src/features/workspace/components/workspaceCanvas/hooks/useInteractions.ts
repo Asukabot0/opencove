@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react'
-import type { TerminalNodeData, WorkspaceSpaceState } from '../../../types'
+import type { Point, TerminalNodeData, WorkspaceSpaceState } from '../../../types'
 import type {
   ContextMenuState,
   CreateNodeInput,
@@ -33,6 +33,7 @@ interface UseWorkspaceCanvasInteractionsParams {
   onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
   nodesRef: React.MutableRefObject<Node<TerminalNodeData>[]>
   createNodeForSession: (input: CreateNodeInput) => Promise<Node<TerminalNodeData> | null>
+  createNoteNode: (anchor: Point) => Node<TerminalNodeData> | null
 }
 
 export function useWorkspaceCanvasInteractions({
@@ -52,8 +53,10 @@ export function useWorkspaceCanvasInteractions({
   onSpacesChange,
   nodesRef,
   createNodeForSession,
+  createNoteNode,
 }: UseWorkspaceCanvasInteractionsParams): {
   clearNodeSelection: () => void
+  handleCanvasDoubleClickCapture: React.MouseEventHandler<HTMLDivElement>
   handleSelectionContextMenu: (
     event: React.MouseEvent,
     selectedNodes: Node<TerminalNodeData>[],
@@ -240,6 +243,141 @@ export function useWorkspaceCanvasInteractions({
     handleCanvasPointerUpCapture()
   }, [handleCanvasPointerUpCapture])
 
+  const handleCanvasDoubleClickCapture = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return
+      }
+
+      if (!(event.target instanceof Element)) {
+        return
+      }
+
+      const isFlowClickTarget =
+        event.target.closest('.react-flow__pane') || event.target.closest('.react-flow__renderer')
+      if (!isFlowClickTarget) {
+        return
+      }
+
+      if (
+        event.target.closest('.react-flow__node') ||
+        event.target.closest('.react-flow__panel') ||
+        event.target.closest('.react-flow__minimap') ||
+        event.target.closest('.react-flow__controls') ||
+        event.target.closest('.workspace-space-region__label-group') ||
+        event.target.closest('.workspace-space-region__drag-handle') ||
+        event.target.closest('button, input, textarea, select, a')
+      ) {
+        return
+      }
+
+      clearNodeSelection()
+      setContextMenu(null)
+      setEmptySelectionPrompt(null)
+      cancelSpaceRename()
+
+      const flowPosition = reactFlow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      })
+
+      const anchor: Point = {
+        x: flowPosition.x,
+        y: flowPosition.y,
+      }
+
+      const created = createNoteNode(anchor)
+      if (!created) {
+        return
+      }
+
+      const targetSpace =
+        spacesRef.current.find(space => {
+          if (!space.rect) {
+            return false
+          }
+
+          return (
+            anchor.x >= space.rect.x &&
+            anchor.x <= space.rect.x + space.rect.width &&
+            anchor.y >= space.rect.y &&
+            anchor.y <= space.rect.y + space.rect.height
+          )
+        }) ?? null
+
+      if (!targetSpace) {
+        return
+      }
+
+      const nextSpaces = sanitizeSpaces(
+        spacesRef.current.map(space => {
+          const filtered = space.nodeIds.filter(nodeId => nodeId !== created.id)
+
+          if (space.id !== targetSpace.id) {
+            return { ...space, nodeIds: filtered }
+          }
+
+          return { ...space, nodeIds: [...new Set([...filtered, created.id])] }
+        }),
+      )
+
+      const { spaces: pushedSpaces, nodePositionById } = expandSpaceToFitOwnedNodesAndPushAway({
+        targetSpaceId: targetSpace.id,
+        spaces: nextSpaces,
+        nodeRects: nodesRef.current.map(node => ({
+          id: node.id,
+          rect: {
+            x: node.position.x,
+            y: node.position.y,
+            width: node.data.width,
+            height: node.data.height,
+          },
+        })),
+        gap: 24,
+      })
+
+      if (nodePositionById.size > 0) {
+        setNodes(
+          prevNodes => {
+            let hasChanged = false
+            const next = prevNodes.map(node => {
+              const nextPosition = nodePositionById.get(node.id)
+              if (!nextPosition) {
+                return node
+              }
+
+              if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+                return node
+              }
+
+              hasChanged = true
+              return {
+                ...node,
+                position: nextPosition,
+              }
+            })
+
+            return hasChanged ? next : prevNodes
+          },
+          { syncLayout: false },
+        )
+      }
+
+      onSpacesChange(pushedSpaces)
+    },
+    [
+      cancelSpaceRename,
+      clearNodeSelection,
+      createNoteNode,
+      nodesRef,
+      onSpacesChange,
+      reactFlow,
+      setContextMenu,
+      setEmptySelectionPrompt,
+      setNodes,
+      spacesRef,
+    ],
+  )
   const handlePaneClick = useCallback(
     (_event: React.MouseEvent | MouseEvent) => {
       if (ignoreNextPaneClickRef.current) {
@@ -373,6 +511,7 @@ export function useWorkspaceCanvasInteractions({
 
   return {
     clearNodeSelection,
+    handleCanvasDoubleClickCapture,
     handleSelectionContextMenu,
     handleNodeContextMenu,
     handlePaneContextMenu,

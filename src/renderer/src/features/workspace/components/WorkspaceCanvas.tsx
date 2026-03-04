@@ -95,7 +95,9 @@ function WorkspaceCanvasInner({
     updateNodeScrollback,
     updateTerminalTitle,
     renameTerminalTitle,
+    updateNoteText,
     createNodeForSession,
+    createNoteNode,
     createTaskNode,
   } = useWorkspaceCanvasNodesStore({
     nodes,
@@ -315,6 +317,7 @@ function WorkspaceCanvasInner({
     actionRefs,
     closeNode,
     resizeNode,
+    updateNoteText,
     updateNodeScrollback,
     updateTerminalTitle,
     renameTerminalTitle,
@@ -345,6 +348,7 @@ function WorkspaceCanvasInner({
     handleCanvasPointerDownCapture,
     handleCanvasPointerMoveCapture,
     handleCanvasPointerUpCapture,
+    handleCanvasDoubleClickCapture,
     handlePaneClick,
     createTerminalNode,
   } = useWorkspaceCanvasInteractions({
@@ -364,6 +368,7 @@ function WorkspaceCanvasInner({
     onSpacesChange,
     nodesRef,
     createNodeForSession,
+    createNoteNode,
   })
   const applyChanges = useWorkspaceCanvasApplyNodeChanges({
     nodesRef,
@@ -400,6 +405,7 @@ function WorkspaceCanvasInner({
       handleCanvasPointerDownCapture={handleCanvasPointerDownCapture}
       handleCanvasPointerMoveCapture={handleCanvasPointerMoveCapture}
       handleCanvasPointerUpCapture={handleCanvasPointerUpCapture}
+      handleCanvasDoubleClickCapture={handleCanvasDoubleClickCapture}
       handleCanvasWheelCapture={handleCanvasWheelCapture}
       nodes={nodes}
       edges={taskAgentEdges}

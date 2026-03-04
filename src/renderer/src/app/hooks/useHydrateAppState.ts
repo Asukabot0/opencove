@@ -73,7 +73,7 @@ export function useHydrateAppState({
 
       const hydratedNodeResults = await Promise.allSettled(
         runtimeNodes.map(async node => {
-          if (node.data.kind === 'task') {
+          if (node.data.kind === 'task' || node.data.kind === 'note') {
             return {
               ...node,
               data: {

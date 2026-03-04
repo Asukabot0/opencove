@@ -5,6 +5,7 @@ import type { Size, TaskRuntimeStatus, TerminalNodeData } from '../../../types'
 export interface WorkspaceCanvasActionRefs {
   closeNodeRef: React.MutableRefObject<(nodeId: string) => Promise<void>>
   resizeNodeRef: React.MutableRefObject<(nodeId: string, desiredSize: Size) => void>
+  updateNoteTextRef: React.MutableRefObject<(nodeId: string, text: string) => void>
   runTaskAgentRef: React.MutableRefObject<(nodeId: string) => Promise<void>>
   resumeTaskAgentSessionRef: React.MutableRefObject<
     (taskNodeId: string, recordId: string) => Promise<void>
@@ -32,6 +33,9 @@ export function useWorkspaceCanvasActionRefs(): WorkspaceCanvasActionRefs {
   )
   const resizeNodeRef = useRef<(nodeId: string, desiredSize: Size) => void>(
     (_nodeId: string, _desiredSize: Size) => undefined,
+  )
+  const updateNoteTextRef = useRef<(nodeId: string, text: string) => void>(
+    (_nodeId: string, _text: string) => undefined,
   )
   const runTaskAgentRef = useRef<(nodeId: string) => Promise<void>>(
     async (_nodeId: string) => undefined,
@@ -70,6 +74,7 @@ export function useWorkspaceCanvasActionRefs(): WorkspaceCanvasActionRefs {
   return {
     closeNodeRef,
     resizeNodeRef,
+    updateNoteTextRef,
     runTaskAgentRef,
     resumeTaskAgentSessionRef,
     removeTaskAgentSessionRecordRef,
@@ -90,6 +95,7 @@ interface SyncActionRefsParams {
   actionRefs: WorkspaceCanvasActionRefs
   closeNode: (nodeId: string) => Promise<void>
   resizeNode: (nodeId: string, desiredSize: Size) => void
+  updateNoteText: (nodeId: string, text: string) => void
   updateNodeScrollback: (nodeId: string, scrollback: string) => void
   updateTerminalTitle: (nodeId: string, title: string) => void
   renameTerminalTitle: (nodeId: string, title: string) => void
@@ -102,6 +108,7 @@ export function useWorkspaceCanvasSyncActionRefs({
   actionRefs,
   closeNode,
   resizeNode,
+  updateNoteText,
   updateNodeScrollback,
   updateTerminalTitle,
   renameTerminalTitle,
@@ -116,6 +123,12 @@ export function useWorkspaceCanvasSyncActionRefs({
   useEffect(() => {
     actionRefs.resizeNodeRef.current = resizeNode
   }, [actionRefs.resizeNodeRef, resizeNode])
+
+  useEffect(() => {
+    actionRefs.updateNoteTextRef.current = (nodeId, text) => {
+      updateNoteText(nodeId, text)
+    }
+  }, [actionRefs.updateNoteTextRef, updateNoteText])
 
   useEffect(() => {
     actionRefs.updateNodeScrollbackRef.current = (nodeId, scrollback) => {
@@ -142,7 +155,7 @@ export function useWorkspaceCanvasSyncActionRefs({
       }
 
       const targetNode = nodesRef.current.find(node => node.id === nodeId)
-      if (!targetNode || targetNode.data.kind === 'task') {
+      if (!targetNode || targetNode.data.kind === 'task' || targetNode.data.kind === 'note') {
         return
       }
 

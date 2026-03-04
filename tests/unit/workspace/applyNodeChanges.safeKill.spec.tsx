@@ -48,6 +48,7 @@ describe('useWorkspaceCanvasApplyNodeChanges', () => {
           scrollback: null,
           agent: null,
           task: null,
+          note: null,
         },
         draggable: true,
         selectable: true,

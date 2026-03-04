@@ -1,7 +1,7 @@
 import type { Node } from '@xyflow/react'
 import type { AgentSettings, AgentProvider } from '../settings/agentConfig'
 
-export type WorkspaceNodeKind = 'terminal' | 'agent' | 'task'
+export type WorkspaceNodeKind = 'terminal' | 'agent' | 'task' | 'note'
 
 export type AgentRuntimeStatus =
   | 'running'
@@ -64,6 +64,10 @@ export interface TaskNodeData {
   updatedAt: string | null
 }
 
+export interface NoteNodeData {
+  text: string
+}
+
 export interface TerminalNodeData {
   [key: string]: unknown
   sessionId: string
@@ -82,6 +86,7 @@ export interface TerminalNodeData {
   expectedDirectory?: string | null
   agent: AgentNodeData | null
   task: TaskNodeData | null
+  note: NoteNodeData | null
 }
 
 export interface WorkspaceState {
@@ -140,7 +145,7 @@ export interface PersistedTerminalNode {
   executionDirectory?: string | null
   expectedDirectory?: string | null
   agent: AgentNodeData | null
-  task: TaskNodeData | null
+  task: TaskNodeData | NoteNodeData | null
 }
 
 export interface PersistedAppState {

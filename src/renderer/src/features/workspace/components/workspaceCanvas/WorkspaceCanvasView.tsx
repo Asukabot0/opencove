@@ -42,6 +42,7 @@ interface WorkspaceCanvasViewProps {
   handleCanvasPointerDownCapture: React.PointerEventHandler<HTMLDivElement>
   handleCanvasPointerMoveCapture: React.PointerEventHandler<HTMLDivElement>
   handleCanvasPointerUpCapture: React.PointerEventHandler<HTMLDivElement>
+  handleCanvasDoubleClickCapture: React.MouseEventHandler<HTMLDivElement>
   handleCanvasWheelCapture: (event: WheelEvent) => void
 
   nodes: Node<TerminalNodeData>[]
@@ -164,6 +165,7 @@ export function WorkspaceCanvasView({
   handleCanvasPointerDownCapture,
   handleCanvasPointerMoveCapture,
   handleCanvasPointerUpCapture,
+  handleCanvasDoubleClickCapture,
   handleCanvasWheelCapture,
   nodes,
   edges,
@@ -250,6 +252,7 @@ export function WorkspaceCanvasView({
       className="workspace-canvas"
       data-canvas-input-mode={resolvedCanvasInputMode}
       onClick={onCanvasClick}
+      onDoubleClickCapture={handleCanvasDoubleClickCapture}
       onPointerDownCapture={handleCanvasPointerDownCapture}
       onPointerMoveCapture={handleCanvasPointerMoveCapture}
       onPointerUpCapture={handleCanvasPointerUpCapture}
@@ -283,7 +286,7 @@ export function WorkspaceCanvasView({
         panOnScroll={false}
         panOnScrollMode={PanOnScrollMode.Free}
         zoomOnPinch={!isTrackpadCanvasMode}
-        zoomOnDoubleClick
+        zoomOnDoubleClick={false}
         defaultViewport={viewport}
         minZoom={MIN_CANVAS_ZOOM}
         maxZoom={MAX_CANVAS_ZOOM}

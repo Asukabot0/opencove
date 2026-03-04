@@ -185,44 +185,36 @@ export function TaskNode({
     }
   }, [height, isResizing, onResize, width])
 
-  const commitTitleEdit = useCallback(() => {
+  const commitTitleDraft = useCallback(() => {
     const normalized = titleDraft.trim()
     if (normalized.length === 0) {
       setTitleDraft(title)
-      setIsTitleEditing(false)
       return
     }
 
     if (normalized !== title) {
       onQuickTitleSave(normalized)
     }
-
-    setIsTitleEditing(false)
   }, [onQuickTitleSave, title, titleDraft])
 
   const cancelTitleEdit = useCallback(() => {
     setTitleDraft(title)
-    setIsTitleEditing(false)
   }, [title])
 
-  const commitRequirementEdit = useCallback(() => {
+  const commitRequirementDraft = useCallback(() => {
     const normalized = requirementDraft.trim()
     if (normalized.length === 0) {
       setRequirementDraft(requirement)
-      setIsRequirementEditing(false)
       return
     }
 
     if (normalized !== requirement) {
       onQuickRequirementSave(normalized)
     }
-
-    setIsRequirementEditing(false)
   }, [onQuickRequirementSave, requirement, requirementDraft])
 
   const cancelRequirementEdit = useCallback(() => {
     setRequirementDraft(requirement)
-    setIsRequirementEditing(false)
   }, [requirement])
 
   const renderedSize = draftSize ?? { width, height }
@@ -261,48 +253,37 @@ export function TaskNode({
 
       <div className="task-node__header" data-node-drag-handle="true">
         <div className="task-node__header-main">
-          {isTitleEditing ? (
-            <input
-              className="task-node__title-input nodrag nowheel"
-              data-testid="task-node-inline-title-input"
-              value={titleDraft}
-              autoFocus
-              onPointerDown={event => {
-                event.stopPropagation()
-              }}
-              onChange={event => {
-                setTitleDraft(event.target.value)
-              }}
-              onBlur={() => {
-                commitTitleEdit()
-              }}
-              onKeyDown={event => {
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  cancelTitleEdit()
-                  return
-                }
+          <input
+            className="task-node__title-input nodrag nowheel"
+            data-testid="task-node-inline-title-input"
+            value={titleDraft}
+            onFocus={() => {
+              setIsTitleEditing(true)
+            }}
+            onPointerDown={event => {
+              event.stopPropagation()
+            }}
+            onChange={event => {
+              setTitleDraft(event.target.value)
+            }}
+            onBlur={() => {
+              commitTitleDraft()
+              setIsTitleEditing(false)
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                cancelTitleEdit()
+                event.currentTarget.blur()
+                return
+              }
 
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  commitTitleEdit()
-                }
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              className="task-node__title task-node__title-button"
-              data-testid="task-node-inline-title-trigger"
-              onClick={event => {
-                event.stopPropagation()
-                setTitleDraft(title)
-                setIsTitleEditing(true)
-              }}
-            >
-              {title}
-            </button>
-          )}
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                event.currentTarget.blur()
+              }
+            }}
+          />
         </div>
 
         <div className="task-node__header-actions nodrag">
@@ -360,50 +341,42 @@ export function TaskNode({
 
       <div className="task-node__content">
         <label>Task Requirement</label>
-        {isRequirementEditing ? (
-          <div className="task-node__inline-editor">
-            <textarea
-              className="task-node__requirement-input nodrag nowheel"
-              data-testid="task-node-inline-requirement-input"
-              value={requirementDraft}
-              autoFocus
-              onPointerDown={event => {
-                event.stopPropagation()
-              }}
-              onChange={event => {
-                setRequirementDraft(event.target.value)
-              }}
-              onBlur={() => {
-                commitRequirementEdit()
-              }}
-              onKeyDown={event => {
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  cancelRequirementEdit()
-                  return
-                }
-
-                if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                  event.preventDefault()
-                  commitRequirementEdit()
-                }
-              }}
-            />
-            <span className="task-node__inline-hint">Ctrl/Cmd+Enter to save · Esc to cancel</span>
-          </div>
-        ) : (
-          <p
-            className="task-node__requirement-text"
-            data-testid="task-node-inline-requirement-trigger"
-            onClick={event => {
-              event.stopPropagation()
-              setRequirementDraft(requirement)
+        <div className="task-node__inline-editor">
+          <textarea
+            className="task-node__requirement-input nodrag nowheel"
+            data-testid="task-node-inline-requirement-input"
+            value={requirementDraft}
+            onFocus={() => {
               setIsRequirementEditing(true)
             }}
-          >
-            {requirement}
-          </p>
-        )}
+            onPointerDown={event => {
+              event.stopPropagation()
+            }}
+            onChange={event => {
+              setRequirementDraft(event.target.value)
+            }}
+            onBlur={() => {
+              commitRequirementDraft()
+              setIsRequirementEditing(false)
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                cancelRequirementEdit()
+                event.currentTarget.blur()
+                return
+              }
+
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                event.currentTarget.blur()
+              }
+            }}
+          />
+          {isRequirementEditing ? (
+            <span className="task-node__inline-hint">Ctrl/Cmd+Enter to save · Esc to cancel</span>
+          ) : null}
+        </div>
       </div>
 
       <TaskNodeAgentSessions

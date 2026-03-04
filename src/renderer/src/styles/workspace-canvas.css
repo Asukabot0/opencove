@@ -28,6 +28,18 @@
   width: 100%;
 }
 
+.workspace-canvas .react-flow__pane,
+.workspace-canvas .react-flow__pane.selection {
+  cursor: default;
+}
+
+.workspace-canvas .react-flow__node,
+.workspace-canvas .react-flow__node.selectable,
+.workspace-canvas .react-flow__node.draggable,
+.workspace-canvas .react-flow__nodesselection-rect {
+  cursor: default;
+}
+
 .workspace-canvas .react-flow__controls {
   left: 16px;
   bottom: 16px;

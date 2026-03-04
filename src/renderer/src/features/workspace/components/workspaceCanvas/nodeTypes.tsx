@@ -1,5 +1,6 @@
 import { useMemo, type MutableRefObject, type ReactElement } from 'react'
 import type { Node } from '@xyflow/react'
+import { NoteNode } from '../NoteNode'
 import { TaskNode } from '../TaskNode'
 import { TerminalNode } from '../TerminalNode'
 import type { Size, TerminalNodeData, WorkspaceSpaceState } from '../../types'
@@ -92,6 +93,44 @@ function TerminalNodeType({
   )
 }
 
+function NoteNodeType({
+  data,
+  id,
+  selectNode,
+  closeNodeRef,
+  resizeNodeRef,
+  updateNoteTextRef,
+}: {
+  data: TerminalNodeData
+  id: string
+  selectNode: (nodeId: string) => void
+  closeNodeRef: MutableRefObject<(nodeId: string) => Promise<void>>
+  resizeNodeRef: MutableRefObject<(nodeId: string, desiredSize: Size) => void>
+  updateNoteTextRef: MutableRefObject<(nodeId: string, text: string) => void>
+}): ReactElement | null {
+  if (!data.note) {
+    return null
+  }
+
+  return (
+    <NoteNode
+      text={data.note.text}
+      width={data.width}
+      height={data.height}
+      onClose={() => {
+        void closeNodeRef.current(id)
+      }}
+      onResize={size => resizeNodeRef.current(id, size)}
+      onTextChange={text => {
+        updateNoteTextRef.current(id, text)
+      }}
+      onInteractionStart={() => {
+        selectNode(id)
+      }}
+    />
+  )
+}
+
 interface WorkspaceCanvasNodeTypesParams {
   nodesRef: MutableRefObject<Node<TerminalNodeData>[]>
   spacesRef: MutableRefObject<WorkspaceSpaceState[]>
@@ -100,6 +139,7 @@ interface WorkspaceCanvasNodeTypesParams {
   selectNode: (nodeId: string) => void
   closeNodeRef: MutableRefObject<(nodeId: string) => Promise<void>>
   resizeNodeRef: MutableRefObject<(nodeId: string, desiredSize: Size) => void>
+  updateNoteTextRef: MutableRefObject<(nodeId: string, text: string) => void>
   updateNodeScrollbackRef: MutableRefObject<UpdateNodeScrollback>
   normalizeViewportForTerminalInteractionRef: MutableRefObject<(nodeId: string) => void>
   requestTaskDeleteRef: MutableRefObject<(nodeId: string) => void>
@@ -125,6 +165,7 @@ export function useWorkspaceCanvasNodeTypes({
   selectNode,
   closeNodeRef,
   resizeNodeRef,
+  updateNoteTextRef,
   updateNodeScrollbackRef,
   normalizeViewportForTerminalInteractionRef,
   requestTaskDeleteRef,
@@ -157,6 +198,18 @@ export function useWorkspaceCanvasNodeTypes({
             normalizeViewportForTerminalInteractionRef={normalizeViewportForTerminalInteractionRef}
             updateTerminalTitleRef={updateTerminalTitleRef}
             renameTerminalTitleRef={renameTerminalTitleRef}
+          />
+        )
+      },
+      noteNode: ({ data, id }: { data: TerminalNodeData; id: string }) => {
+        return (
+          <NoteNodeType
+            data={data}
+            id={id}
+            selectNode={selectNode}
+            closeNodeRef={closeNodeRef}
+            resizeNodeRef={resizeNodeRef}
+            updateNoteTextRef={updateNoteTextRef}
           />
         )
       },
@@ -249,6 +302,7 @@ export function useWorkspaceCanvasNodeTypes({
       spacesRef,
       workspacePath,
       terminalFontSize,
+      updateNoteTextRef,
       openTaskAssignerRef,
       openTaskEditorRef,
       quickUpdateTaskRequirementRef,

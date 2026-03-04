@@ -5,6 +5,7 @@ import { useScrollbackStore } from '../../../store/useScrollbackStore'
 import { findNearestFreePosition } from '../../../utils/collision'
 import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
 import {
+  DEFAULT_NOTE_WINDOW_SIZE,
   MIN_SIZE,
   resolveDefaultAgentWindowSize,
   resolveDefaultTaskWindowSize,
@@ -257,6 +258,42 @@ export function useWorkspaceCanvasNodesStore({
     [onRequestPersistFlush, setNodes],
   )
 
+  const updateNoteText = useCallback(
+    (nodeId: string, text: string) => {
+      setNodes(
+        prevNodes => {
+          let hasChanged = false
+
+          const nextNodes = prevNodes.map(node => {
+            if (node.id !== nodeId || node.data.kind !== 'note' || !node.data.note) {
+              return node
+            }
+
+            if (node.data.note.text === text) {
+              return node
+            }
+
+            hasChanged = true
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                note: {
+                  ...node.data.note,
+                  text,
+                },
+              },
+            }
+          })
+
+          return hasChanged ? nextNodes : prevNodes
+        },
+        { syncLayout: false },
+      )
+    },
+    [setNodes],
+  )
+
   const pushBlockingWindowsRight = useCallback(
     (desired: Point, size: Size): void => {
       const nextPositionByNodeId = computePushBlockingWindowsRight({
@@ -363,6 +400,7 @@ export function useWorkspaceCanvasNodesStore({
               : null,
           agent: kind === 'agent' ? (agent ?? null) : null,
           task: null,
+          note: null,
         },
         draggable: true,
         selectable: true,
@@ -373,6 +411,54 @@ export function useWorkspaceCanvasNodesStore({
       return nextNode
     },
     [defaultTerminalWindowScalePercent, onRequestPersistFlush, pushBlockingWindowsRight, setNodes],
+  )
+
+  const createNoteNode = useCallback(
+    (anchor: Point): Node<TerminalNodeData> | null => {
+      const { placement, canPlace } = resolveNodesPlacement({
+        anchor,
+        size: DEFAULT_NOTE_WINDOW_SIZE,
+        getNodes: () => nodesRef.current,
+        pushBlockingWindowsRight,
+      })
+
+      if (canPlace !== true) {
+        window.alert('当前视图附近没有可用空位，请先移动或关闭部分窗口。')
+        return null
+      }
+
+      const nextNode: Node<TerminalNodeData> = {
+        id: crypto.randomUUID(),
+        type: 'noteNode',
+        position: placement,
+        data: {
+          sessionId: '',
+          title: 'note',
+          titlePinnedByUser: false,
+          width: DEFAULT_NOTE_WINDOW_SIZE.width,
+          height: DEFAULT_NOTE_WINDOW_SIZE.height,
+          kind: 'note',
+          status: null,
+          startedAt: null,
+          endedAt: null,
+          exitCode: null,
+          lastError: null,
+          scrollback: null,
+          agent: null,
+          task: null,
+          note: {
+            text: '',
+          },
+        },
+        draggable: true,
+        selectable: true,
+      }
+
+      setNodes(prevNodes => [...prevNodes, nextNode])
+      onRequestPersistFlush?.()
+      return nextNode
+    },
+    [onRequestPersistFlush, pushBlockingWindowsRight, setNodes],
   )
 
   const createTaskNode = useCallback(
@@ -430,6 +516,7 @@ export function useWorkspaceCanvasNodesStore({
             createdAt: now,
             updatedAt: now,
           },
+          note: null,
         },
         draggable: true,
         selectable: true,
@@ -458,7 +545,9 @@ export function useWorkspaceCanvasNodesStore({
     updateNodeScrollback,
     updateTerminalTitle,
     renameTerminalTitle,
+    updateNoteText,
     createNodeForSession,
+    createNoteNode,
     createTaskNode,
   }
 }

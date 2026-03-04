@@ -27,17 +27,13 @@ test.describe('Workspace Canvas - Tasks (Edit & Delete)', () => {
       const taskNode = window.locator('.task-node').first()
       await expect(taskNode).toBeVisible()
 
-      await taskNode.locator('[data-testid="task-node-inline-requirement-trigger"]').click()
-
       const inlineRequirementInput = taskNode.locator(
         '[data-testid="task-node-inline-requirement-input"]',
       )
       await expect(inlineRequirementInput).toBeVisible()
       await inlineRequirementInput.fill('Inline updated requirement from card')
       await inlineRequirementInput.blur()
-      await expect(taskNode.locator('.task-node__content p')).toContainText(
-        'Inline updated requirement from card',
-      )
+      await expect(inlineRequirementInput).toHaveValue('Inline updated requirement from card')
 
       await taskNode.locator('[data-testid="task-node-open-editor"]').click()
 
@@ -53,8 +49,10 @@ test.describe('Workspace Canvas - Tasks (Edit & Delete)', () => {
 
       await window.locator('[data-testid="workspace-task-edit-submit"]').click()
 
-      await expect(window.locator('.task-node__title').first()).toHaveText('Retry login workflow')
-      await expect(taskNode.locator('.task-node__content p')).toContainText('capped exponential')
+      await expect(taskNode.locator('[data-testid="task-node-inline-title-input"]')).toHaveValue(
+        'Retry login workflow',
+      )
+      await expect(inlineRequirementInput).toHaveValue(/capped exponential/)
 
       const rightResizer = taskNode.locator('[data-testid="task-resizer-right"]')
       const rightResizerBox = await rightResizer.boundingBox()

@@ -31,7 +31,9 @@ export interface UseWorkspaceCanvasNodesStoreResult {
   updateNodeScrollback: (nodeId: string, scrollback: string) => void
   updateTerminalTitle: (nodeId: string, title: string) => void
   renameTerminalTitle: (nodeId: string, title: string) => void
+  updateNoteText: (nodeId: string, text: string) => void
   createNodeForSession: (input: CreateNodeInput) => Promise<Node<TerminalNodeData> | null>
+  createNoteNode: (anchor: Point) => Node<TerminalNodeData> | null
   createTaskNode: (
     anchor: Point,
     title: string,

@@ -45,6 +45,10 @@ export function normalizeNodeKind(value: unknown): WorkspaceNodeKind {
     return 'task'
   }
 
+  if (value === 'note') {
+    return 'note'
+  }
+
   return 'terminal'
 }
 
