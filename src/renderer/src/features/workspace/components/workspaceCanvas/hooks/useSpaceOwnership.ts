@@ -78,7 +78,38 @@ export function useWorkspaceCanvasSpaceOwnership({
       }
 
       const nodeIds = draggedNodeIds
-      const targetSpace = resolveSpaceAtPoint(dropFlowPoint)
+      const draggedNodesForTarget = nodeIds
+        .map(nodeId => {
+          const node = reactFlow.getNode(nodeId)
+          if (!node) {
+            return null
+          }
+
+          const draggedPosition = draggedNodePositionById.get(nodeId)
+          if (!draggedPosition) {
+            return node
+          }
+
+          if (node.position.x === draggedPosition.x && node.position.y === draggedPosition.y) {
+            return node
+          }
+
+          return {
+            ...node,
+            position: draggedPosition,
+          }
+        })
+        .filter((node): node is Node<TerminalNodeData> => Boolean(node))
+
+      const draggedDropRect = computeBoundingRect(draggedNodesForTarget)
+      const targetSpace = resolveSpaceAtPoint(
+        draggedDropRect
+          ? {
+              x: draggedDropRect.x + draggedDropRect.width / 2,
+              y: draggedDropRect.y + draggedDropRect.height / 2,
+            }
+          : dropFlowPoint,
+      )
       const targetSpaceId = targetSpace?.id ?? null
       const nodeIdSet = new Set(nodeIds)
 
@@ -331,6 +362,7 @@ export function useWorkspaceCanvasSpaceOwnership({
     [
       onRequestPersistFlush,
       onSpacesChange,
+      reactFlow,
       resolveSpaceAtPoint,
       setNodes,
       workspacePath,

@@ -23,6 +23,7 @@ interface UseApplyNodeChangesParams {
   spacesRef: MutableRefObject<WorkspaceSpaceState[]>
   selectedSpaceIdsRef: MutableRefObject<string[]>
   onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
+  onRequestPersistFlush?: () => void
 }
 
 export function useWorkspaceCanvasApplyNodeChanges({
@@ -36,6 +37,7 @@ export function useWorkspaceCanvasApplyNodeChanges({
   spacesRef,
   selectedSpaceIdsRef,
   onSpacesChange,
+  onRequestPersistFlush,
 }: UseApplyNodeChangesParams): (changes: NodeChange<Node<TerminalNodeData>>[]) => void {
   return useCallback(
     (changes: NodeChange<Node<TerminalNodeData>>[]) => {
@@ -157,6 +159,7 @@ export function useWorkspaceCanvasApplyNodeChanges({
             if (hasSpaceMoved) {
               spacesRef.current = nextSpaces
               onSpacesChange(nextSpaces)
+              onRequestPersistFlush?.()
             }
 
             const draggedNodeIds = new Set(positionChanges.map(change => change.id))
@@ -280,6 +283,7 @@ export function useWorkspaceCanvasApplyNodeChanges({
       nodesRef,
       normalizePosition,
       onNodesChange,
+      onRequestPersistFlush,
       onSpacesChange,
       selectedSpaceIdsRef,
       selectionDraftRef,

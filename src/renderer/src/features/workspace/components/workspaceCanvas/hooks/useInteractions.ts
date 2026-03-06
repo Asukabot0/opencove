@@ -184,6 +184,7 @@ export function useWorkspaceCanvasInteractions({
     selectionDraftRef,
     reactFlow,
     spacesRef,
+    selectedNodeIdsRef,
     selectedSpaceIdsRef,
     setNodes,
     setSelectedNodeIds,

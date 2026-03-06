@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragLocatorTo,
   launchApp,
   storageKey,
   testWorkspacePath,
@@ -191,7 +192,7 @@ test.describe('Workspace Canvas - Spaces (Anchors & Mismatch)', () => {
       await expect(agentNode).toBeVisible()
       await expect(agentNode.locator('.terminal-node__badge--warning')).toHaveCount(0)
 
-      await agentNode.locator('.terminal-node__header').dragTo(pane, {
+      await dragLocatorTo(window, agentNode.locator('.terminal-node__header'), pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: { x: 820, y: 320 },
       })

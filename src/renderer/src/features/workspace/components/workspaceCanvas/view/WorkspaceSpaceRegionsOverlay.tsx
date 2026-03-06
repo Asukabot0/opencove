@@ -125,6 +125,7 @@ export function WorkspaceSpaceRegionsOverlay({
         const resolvedWorktreeName = hasWorktreeDirectory
           ? basenameFromPath(resolvedWorktreeInfo?.path ?? normalizedDirectoryPath)
           : null
+        const isSelected = selectedSpaceIdSet.has(space.id)
 
         const resolvedBranchLabel = resolvedWorktreeInfo
           ? (resolvedWorktreeInfo.branch ??
@@ -137,7 +138,7 @@ export function WorkspaceSpaceRegionsOverlay({
           <div
             key={space.id}
             className={
-              selectedSpaceIdSet.has(space.id)
+              isSelected
                 ? 'workspace-space-region workspace-space-region--selected'
                 : 'workspace-space-region'
             }
@@ -146,59 +147,89 @@ export function WorkspaceSpaceRegionsOverlay({
               width: resolvedRect.width,
               height: resolvedRect.height,
             }}
-            onPointerDown={
-              selectedSpaceIdSet.has(space.id)
-                ? event => {
-                    handleSpaceDragHandlePointerDown(event, space.id, { mode: 'region' })
-                  }
-                : undefined
-            }
-            onMouseDown={
-              selectedSpaceIdSet.has(space.id)
-                ? event => {
-                    handleSpaceDragHandlePointerDown(event, space.id, { mode: 'region' })
-                  }
-                : undefined
-            }
           >
+            {isSelected ? (
+              <div
+                className="workspace-space-region__move-handle"
+                data-testid={`workspace-space-drag-${space.id}-move`}
+                onPointerDown={event => {
+                  handleSpaceDragHandlePointerDown(event, space.id, { mode: 'region' })
+                }}
+                onMouseDown={event => {
+                  handleSpaceDragHandlePointerDown(event, space.id, { mode: 'region' })
+                }}
+              />
+            ) : null}
             <div
               className="workspace-space-region__drag-handle workspace-space-region__drag-handle--top"
               data-testid={`workspace-space-drag-${space.id}-top`}
               onPointerDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
               onMouseDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
             />
             <div
               className="workspace-space-region__drag-handle workspace-space-region__drag-handle--right"
               data-testid={`workspace-space-drag-${space.id}-right`}
               onPointerDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
               onMouseDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
             />
             <div
               className="workspace-space-region__drag-handle workspace-space-region__drag-handle--bottom"
               data-testid={`workspace-space-drag-${space.id}-bottom`}
               onPointerDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
               onMouseDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
             />
             <div
               className="workspace-space-region__drag-handle workspace-space-region__drag-handle--left"
               data-testid={`workspace-space-drag-${space.id}-left`}
               onPointerDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
               onMouseDown={event => {
-                handleSpaceDragHandlePointerDown(event, space.id)
+                handleSpaceDragHandlePointerDown(
+                  event,
+                  space.id,
+                  isSelected ? { mode: 'region' } : undefined,
+                )
               }}
             />
             {editingSpaceId === space.id ? (

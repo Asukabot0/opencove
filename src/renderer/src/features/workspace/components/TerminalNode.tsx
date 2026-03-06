@@ -398,7 +398,19 @@ export function TerminalNode({
           return
         }
 
-        onInteractionStart?.()
+        if (!(event.target instanceof Element)) {
+          return
+        }
+
+        const shouldNormalizeViewport = Boolean(event.target.closest('.terminal-node__terminal'))
+        const shouldSelectNode =
+          shouldNormalizeViewport || Boolean(event.target.closest('.terminal-node__header'))
+
+        if (!shouldSelectNode) {
+          return
+        }
+
+        onInteractionStart?.({ normalizeViewport: shouldNormalizeViewport })
       }}
       onWheel={event => {
         if (shouldStopWheelPropagation(event.currentTarget)) {

@@ -1,6 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
-  AGENT_PROVIDERS,
   resolveTaskTitleProvider,
   type AgentProvider,
   type AgentSettings,
@@ -28,13 +27,11 @@ interface SettingsPanelProps {
   modelCatalogByProvider: Record<AgentProvider, ProviderModelCatalogEntry>
   workspaces: WorkspaceState[]
   onWorkspaceWorktreesRootChange: (workspaceId: string, worktreesRoot: string) => void
-  onRefreshProviderModels: (provider: AgentProvider) => void
   onChange: (settings: AgentSettings) => void
   onClose: () => void
 }
 
-type CoreSectionId = 'general' | 'agents' | 'nodes'
-// activeSectionId can be a core section or a workspace ID
+type CoreSectionId = 'general' | 'canvas' | 'task-tags'
 type SettingsSectionId = CoreSectionId | string
 
 function createInitialInputState(): Record<AgentProvider, string> {
@@ -42,7 +39,7 @@ function createInitialInputState(): Record<AgentProvider, string> {
 }
 
 function getFolderName(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean)
+  const parts = path.split(/[/]/).filter(Boolean)
   return parts[parts.length - 1] || path
 }
 
@@ -51,7 +48,6 @@ export function SettingsPanel({
   modelCatalogByProvider,
   workspaces,
   onWorkspaceWorktreesRootChange,
-  onRefreshProviderModels,
   onChange,
   onClose,
 }: SettingsPanelProps): React.JSX.Element {
@@ -60,10 +56,6 @@ export function SettingsPanel({
   >(() => createInitialInputState())
   const [activeSectionId, setActiveSectionId] = useState<SettingsSectionId>('general')
   const [addTaskTagInput, setAddTaskTagInput] = useState('')
-
-  useEffect(() => {
-    AGENT_PROVIDERS.forEach(provider => onRefreshProviderModels(provider))
-  }, [onRefreshProviderModels])
 
   const updateDefaultProvider = (provider: AgentProvider): void =>
     onChange({ ...settings, defaultProvider: provider })
@@ -98,6 +90,7 @@ export function SettingsPanel({
     if (candidate.length === 0) {
       return
     }
+
     const nextTags = settings.taskTagOptions.includes(candidate)
       ? settings.taskTagOptions
       : [...settings.taskTagOptions, candidate]
@@ -128,6 +121,7 @@ export function SettingsPanel({
     if (!currentOptions.includes(model)) {
       return
     }
+
     const nextOptions = currentOptions.filter(option => option !== model)
     onChange({
       ...settings,
@@ -153,6 +147,7 @@ export function SettingsPanel({
     if (candidate.length === 0) {
       return
     }
+
     const existingOptions = settings.customModelOptionsByProvider[provider]
     const nextOptions = existingOptions.includes(candidate)
       ? existingOptions
@@ -171,87 +166,33 @@ export function SettingsPanel({
 
   const effectiveTaskTitleProvider = useMemo(() => resolveTaskTitleProvider(settings), [settings])
 
-  const renderActiveSection = (): React.ReactNode => {
-    // Check core sections
-    if (activeSectionId === 'general') {
-      return (
-        <CanvasSection
-          canvasInputMode={settings.canvasInputMode}
-          normalizeZoomOnTerminalClick={settings.normalizeZoomOnTerminalClick}
-          defaultTerminalWindowScalePercent={settings.defaultTerminalWindowScalePercent}
-          terminalFontSize={settings.terminalFontSize}
-          uiFontSize={settings.uiFontSize}
-          onChangeCanvasInputMode={updateCanvasInputMode}
-          onChangeNormalizeZoomOnTerminalClick={updateNormalizeZoomOnTerminalClick}
-          onChangeDefaultTerminalWindowScalePercent={updateDefaultTerminalWindowScalePercent}
-          onChangeTerminalFontSize={updateTerminalFontSize}
-          onChangeUiFontSize={updateUiFontSize}
-        />
-      )
-    }
-    if (activeSectionId === 'agents') {
-      return (
-        <>
-          <GeneralSection
-            defaultProvider={settings.defaultProvider}
-            agentFullAccess={settings.agentFullAccess}
-            onChangeDefaultProvider={updateDefaultProvider}
-            onChangeAgentFullAccess={updateAgentFullAccess}
-          />
-          <TaskTitleSection
-            defaultProvider={settings.defaultProvider}
-            taskTitleProvider={settings.taskTitleProvider}
-            taskTitleModel={settings.taskTitleModel}
-            effectiveTaskTitleProvider={effectiveTaskTitleProvider}
-            onChangeTaskTitleProvider={updateTaskTitleProvider}
-            onChangeTaskTitleModel={updateTaskTitleModel}
-          />
-          <ModelOverrideSection
-            settings={settings}
-            modelCatalogByProvider={modelCatalogByProvider}
-            addModelInputByProvider={addModelInputByProvider}
-            onRefreshProviderModels={onRefreshProviderModels}
-            onToggleCustomModelEnabled={updateProviderCustomModelEnabled}
-            onSelectProviderModel={selectProviderModel}
-            onRemoveCustomModelOption={removeCustomModelOption}
-            onChangeAddModelInput={updateAddModelInput}
-            onAddCustomModelOption={addCustomModelOption}
-          />
-        </>
-      )
-    }
-    if (activeSectionId === 'nodes') {
-      return (
-        <TaskTagsSection
-          tags={settings.taskTagOptions}
-          addTaskTagInput={addTaskTagInput}
-          onChangeAddTaskTagInput={setAddTaskTagInput}
-          onAddTag={addTaskTagOption}
-          onRemoveTag={removeTaskTagOption}
-        />
-      )
-    }
-
-    // Check if it's a project
-    const activeProject = workspaces.find(w => w.id === activeSectionId)
-    if (activeProject) {
-      return (
-        <WorkspaceSection
-          workspacePath={activeProject.path}
-          worktreesRoot={activeProject.worktreesRoot}
-          onChangeWorktreesRoot={root => onWorkspaceWorktreesRootChange(activeProject.id, root)}
-        />
-      )
-    }
-
-    return null
+  const scrollToSection = (id: SettingsSectionId, targetId: string): void => {
+    setActiveSectionId(id)
+    window.requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({
+        block: 'start',
+        behavior: 'auto',
+      })
+    })
   }
 
-  const NavButton = ({ id, label }: { id: SettingsSectionId; label: string }) => {
+  const NavButton = ({
+    id,
+    label,
+    targetId,
+    testId,
+  }: {
+    id: SettingsSectionId
+    label: string
+    targetId: string
+    testId?: string
+  }) => {
     const isActive = activeSectionId === id
     return (
       <button
-        onClick={() => setActiveSectionId(id)}
+        type="button"
+        data-testid={testId}
+        onClick={() => scrollToSection(id, targetId)}
         className={`settings-panel__nav-button${isActive ? ' settings-panel__nav-button--active' : ''}`}
       >
         {label}
@@ -263,9 +204,24 @@ export function SettingsPanel({
     <div className="settings-backdrop" onClick={onClose}>
       <section className="settings-panel" onClick={e => e.stopPropagation()}>
         <aside className="settings-panel__sidebar">
-          <NavButton id="general" label="General" />
-          <NavButton id="agents" label="Agents" />
-          <NavButton id="nodes" label="Nodes" />
+          <NavButton
+            id="general"
+            label="General"
+            targetId="settings-section-general"
+            testId="settings-section-nav-general"
+          />
+          <NavButton
+            id="canvas"
+            label="Canvas"
+            targetId="settings-section-canvas"
+            testId="settings-section-nav-canvas"
+          />
+          <NavButton
+            id="task-tags"
+            label="Task Tags"
+            targetId="settings-section-task-tags"
+            testId="settings-section-nav-task-tags"
+          />
 
           <div style={{ marginTop: '24px', padding: '0 16px' }}>
             <span
@@ -281,8 +237,15 @@ export function SettingsPanel({
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '8px' }}>
-            {workspaces.map(w => (
-              <NavButton key={w.id} id={w.id} label={getFolderName(w.path)} />
+            {workspaces.map(workspace => (
+              <NavButton
+                key={workspace.id}
+                id={workspace.id}
+                label={
+                  workspace.name.trim().length > 0 ? workspace.name : getFolderName(workspace.path)
+                }
+                targetId={`settings-section-workspace-${workspace.id}`}
+              />
             ))}
           </div>
         </aside>
@@ -294,7 +257,61 @@ export function SettingsPanel({
               ×
             </button>
           </div>
-          <div className="settings-panel__content">{renderActiveSection()}</div>
+          <div className="settings-panel__content">
+            <GeneralSection
+              defaultProvider={settings.defaultProvider}
+              agentFullAccess={settings.agentFullAccess}
+              onChangeDefaultProvider={updateDefaultProvider}
+              onChangeAgentFullAccess={updateAgentFullAccess}
+            />
+            <CanvasSection
+              canvasInputMode={settings.canvasInputMode}
+              normalizeZoomOnTerminalClick={settings.normalizeZoomOnTerminalClick}
+              defaultTerminalWindowScalePercent={settings.defaultTerminalWindowScalePercent}
+              terminalFontSize={settings.terminalFontSize}
+              uiFontSize={settings.uiFontSize}
+              onChangeCanvasInputMode={updateCanvasInputMode}
+              onChangeNormalizeZoomOnTerminalClick={updateNormalizeZoomOnTerminalClick}
+              onChangeDefaultTerminalWindowScalePercent={updateDefaultTerminalWindowScalePercent}
+              onChangeTerminalFontSize={updateTerminalFontSize}
+              onChangeUiFontSize={updateUiFontSize}
+            />
+            <TaskTitleSection
+              defaultProvider={settings.defaultProvider}
+              taskTitleProvider={settings.taskTitleProvider}
+              taskTitleModel={settings.taskTitleModel}
+              effectiveTaskTitleProvider={effectiveTaskTitleProvider}
+              onChangeTaskTitleProvider={updateTaskTitleProvider}
+              onChangeTaskTitleModel={updateTaskTitleModel}
+            />
+            <ModelOverrideSection
+              settings={settings}
+              modelCatalogByProvider={modelCatalogByProvider}
+              addModelInputByProvider={addModelInputByProvider}
+              onToggleCustomModelEnabled={updateProviderCustomModelEnabled}
+              onSelectProviderModel={selectProviderModel}
+              onRemoveCustomModelOption={removeCustomModelOption}
+              onChangeAddModelInput={updateAddModelInput}
+              onAddCustomModelOption={addCustomModelOption}
+            />
+            <TaskTagsSection
+              tags={settings.taskTagOptions}
+              addTaskTagInput={addTaskTagInput}
+              onChangeAddTaskTagInput={setAddTaskTagInput}
+              onAddTag={addTaskTagOption}
+              onRemoveTag={removeTaskTagOption}
+            />
+            {workspaces.map(workspace => (
+              <WorkspaceSection
+                key={workspace.id}
+                sectionId={`settings-section-workspace-${workspace.id}`}
+                workspaceName={workspace.name}
+                workspacePath={workspace.path}
+                worktreesRoot={workspace.worktreesRoot}
+                onChangeWorktreesRoot={root => onWorkspaceWorktreesRootChange(workspace.id, root)}
+              />
+            ))}
+          </div>
         </div>
       </section>
     </div>

@@ -1,80 +1,59 @@
 # Debugging Guide
 
-## E2E: Electron + Playwright 稳定运行
+## 规则
 
-本项目 E2E 测试依赖 `out/` 目录产物（`out/main`、`out/preload`、`out/renderer`）。
-如果直接改代码后不重建就跑 E2E，Playwright 可能会启动旧产物，出现“看起来像新问题，实际是旧构建”的假失败。
+- 凡遇到 `pnpm pre-commit`、`pnpm test -- --run`、`pnpm test:e2e` 或单独 `Playwright` 用例失败，**继续排查前先读本文件**。
+- 先缩小复现范围，再改代码；不要一上来跑全量。
+- 若 UI 表现与代码不一致，先怀疑是否跑到了旧构建产物。
 
-### 常见症状
+## 失败后的首轮动作
 
-- 点击 `Add` 后没有 workspace 出现。
-- 页面突然空白（`#root` 为空）。
-- 终端拖拽/缩放后出现渲染异常。
-- 右键建终端在 E2E 中偶发失败（命中节点而非 pane）。
+1. 记录**原始失败命令**与**首个失败用例/报错**。
+2. 判断失败类型：`format/lint`、`typecheck`、`unit`、`E2E`、运行时崩溃。
+3. 若是单独跑 `Playwright`，先执行 `pnpm build`。
+4. 只重跑目标失败项，确认是否稳定复现。
+5. 若是 E2E，优先看 `screenshot`、`trace`、`console` 与持久化状态。
 
-## 已落地的稳定性策略
+## E2E 稳定运行原则
 
-### 1) E2E 一律先构建
+### 优先使用仓库脚本
 
-已将 `test:e2e` 固化为脚本：
-
-```bash
-node scripts/test-e2e-with-window-fallback.mjs
-```
-
-因此直接执行：
+运行：
 
 ```bash
 pnpm test:e2e
 ```
 
-该脚本会先执行 `pnpm build` 再运行 Playwright。
+该命令会先执行 `pnpm build`，再通过 `scripts/test-e2e-with-window-fallback.mjs` 启动 Playwright。
 
-### 1.1) hidden 模式崩溃自动降级为 offscreen
+### 默认窗口模式与自动降级
 
-默认窗口模式为 `COVE_E2E_WINDOW_MODE=hidden`（避免界面干扰）。
-若首轮运行失败且日志命中 Electron/Chromium 崩溃特征（例如 `SIGSEGV`、`Target page, context or browser has been closed`），脚本会自动执行：
+- 默认窗口模式：`COVE_E2E_WINDOW_MODE=offscreen`
+- 这是后台运行模式，通常比 `hidden` 更稳定。
+- 若日志命中 Electron/Chromium 崩溃特征（如 `SIGSEGV`、`Target page, context or browser has been closed`），脚本会按更稳模式自动重试失败用例。
+
+常用控制项：
 
 ```bash
-COVE_E2E_WINDOW_MODE=offscreen pnpm exec playwright test --last-failed
+COVE_E2E_WINDOW_MODE=normal|inactive|offscreen|hidden pnpm test:e2e
+COVE_E2E_DISABLE_CRASH_FALLBACK=1 pnpm test:e2e
 ```
 
-可选控制项：
+### 单独跑 Playwright 时必须先构建
 
-- 强制窗口模式：`COVE_E2E_WINDOW_MODE=normal|inactive|offscreen|hidden pnpm test:e2e`
-- 关闭自动降级：`COVE_E2E_DISABLE_CRASH_FALLBACK=1 pnpm test:e2e`
+```bash
+pnpm build
+pnpm exec playwright test tests/e2e/<target>.spec.ts
+```
 
-### 2) 目录选择使用测试注入路径
+否则 Playwright 可能继续使用旧的 `out/` 产物，造成“代码已改、现象没变”的假失败。
 
-主进程 `workspace:select-directory` 支持读取 `COVE_TEST_WORKSPACE`。
-E2E 启动 Electron 时必须注入该变量，避免系统原生弹窗阻塞。
-
-### 3) 每个用例先清空持久化状态
-
-清理 localStorage key：`cove:m0:workspace-state`，然后 `reload`，避免状态互相污染。
-
-### 4) 交互回归采用“状态 seed”而非依赖右键建第二个终端
-
-已在 `tests/e2e/workspace-canvas.spec.ts` 中采用：
-
-- **交互稳定性测试**：先向 localStorage 注入带 1~2 个终端节点的状态，再 reload。
-- **启动冒烟测试**：继续由 `tests/e2e/smoke.spec.ts` 覆盖窗口与应用启动可用性。
-
-这样可稳定覆盖以下核心场景：
-
-- 终端拖拽后不空白；
-- 终端缩放后尺寸变化且不空白；
-- 与另一个终端窗口交互后不空白；
-- 终端区域滚轮不会缩放画布。
-
-这套方式规避了“可见区右键位置被节点遮挡”带来的随机性。
-
-## 推荐调试流程
+## E2E 调试流程
 
 ### 1) 先跑目标用例
 
 ```bash
-pnpm test:e2e -- tests/e2e/workspace-canvas.spec.ts
+pnpm exec playwright test tests/e2e/<target>.spec.ts --project electron --reporter=line
 ```
 
 ### 2) 失败时看 trace
@@ -83,102 +62,109 @@ pnpm test:e2e -- tests/e2e/workspace-canvas.spec.ts
 pnpm exec playwright show-trace test-results/<failed-case>/trace.zip
 ```
 
-重点检查：
+优先检查：
 
-- `console` / `pageerror`；
-- `workspace-item` 是否出现；
-- `.terminal-node` 数量是否与预期一致；
-- `.xterm` 在拖拽/缩放后是否仍可见；
-- `.react-flow__viewport` 样式在终端滚轮后是否变化。
+- `console` / `pageerror`
+- Electron 窗口是否真的完成加载
+- 关键节点数量、选中态、空间框选态是否符合预期
+- 截图中的点击/拖拽命中点是否正确
+- UI 与持久化状态是否一致
 
-### 3) 全量回归
+### 3) 再决定是否回到全量回归
 
 ```bash
 pnpm test:e2e
 ```
 
-## 渲染空白专项排查清单
+## Playwright 交互排查重点
 
-出现“窗口交互后终端空白/整块重渲染”时，优先检查：
+### 1) 复杂拖拽优先使用真实鼠标事件
 
-1. `WorkspaceCanvas` 的 `nodeTypes` 是否保持稳定引用（避免节点 remount）。
-2. `TerminalNode` 是否仅在 `sessionId` 变化时重建 xterm 实例。
-3. 拖拽/缩放是否只更新位置和尺寸，而不是替换节点身份。
-4. 当前 E2E 是否跑的是最新 `out/` 构建产物。
+在 Electron `offscreen` + React Flow 场景中，`locator.dragTo()` 可能出现“看起来拖了，但状态没变化”的假成功。
 
-## 终端历史与滚轮专项
+结论：
 
-### 症状 1：切换 workspace 再切回，旧输出消失（新输入还能出现）
+- 节点拖拽、space 拖拽、多选框拖拽，优先使用 `page.mouse.move/down/up`
+- 仓库内已有稳定 helper 时，优先复用 helper，而不是重新写 `dragTo()`
 
-根因通常是：渲染进程切换 workspace 时会卸载终端组件，期间 PTY 仍在输出；如果主进程没有输出快照缓存，重新挂载后只能看到“重新订阅后”的新输出。
+### 2) 多选后再拖，先给选择框一个极短 settle 时间
 
-排查点：
+`nodesselection-rect` 刚出现时立刻拖动，可能命中还没稳定，导致多选拖拽偶发失败。
 
-1. 主进程 PTY 管理器是否维护会话输出快照（ring buffer）。
-2. 是否提供 `pty:snapshot` IPC。
-3. 终端组件挂载时是否先 `snapshot` 回放，再绑定 `onData`/`onExit`。
+建议：
 
-快速验证：
+- 先确认 `.react-flow__nodesselection-rect` 可见
+- 视情况等待一个很短的稳定时间，再开始拖拽
 
-- 在终端执行 `echo <token>`；
-- 切换到其他 workspace，再切回；
-- 不按回车时也应仍能看到 `<token>`。
+### 3) 避免被 minimap 或 overlay 误拦截
 
-对应用例：
+如果点击/拖拽看似命中目标但事件没生效，优先检查：
 
-- `tests/e2e/workspace-canvas.spec.ts` 中 `preserves terminal history after workspace switch`。
+- minimap 是否覆盖了目标区域
+- space overlay / drag handle / label 区域是否抢占事件
+- 点击点是否过于贴边
 
-### 症状 1.1：重启应用后终端历史丢失
+## 持久化与状态污染排查
 
-根因通常是：终端历史仅保存在主进程 PTY 内存快照；应用重启会导致进程与内存重建，因此必须把 scrollback 同步到渲染层持久化状态。
+### 1) 测试优先使用 seed 状态
 
-修复策略：
+交互回归应尽量通过测试 helper 直接 seed workspace 状态，而不是依赖多步 UI 创建流程。
 
-1. 为终端节点持久化结构增加 `scrollback` 字段。
-2. 终端组件在挂载时合并 `persisted scrollback` 与 `pty:snapshot`（避免重复拼接）。
-3. 终端输出变更后做节流回写（避免高频写 localStorage）。
-4. 回调需用 ref 持有，避免因函数引用变化导致 xterm 实例反复重建。
+这样更容易排除：
 
-快速验证：
+- 右键菜单被遮挡
+- 初始节点布局随机变化
+- 前序步骤失败掩盖真实问题
 
-- 在终端执行 `echo <token>` 并确认可见；
-- 刷新窗口（或重启应用）；
-- 不按回车时也应仍能看到 `<token>`。
+### 2) 检查状态是否被前一个用例污染
 
-对应用例：
+重点确认：
 
-- `tests/e2e/workspace-canvas.spec.ts` 中 `preserves terminal history after app reload`。
+- `cove:m0:workspace-state` 是否已清理或重建
+- `reload` 后是否真的读到了当前种入的数据
+- workspace / nodes / spaces 数量是否与预期一致
 
-### 症状 2：鼠标在终端上滚轮，画布不缩放但终端也不滚动
+### 3) 当 UI 与断言不一致时，直接读持久化状态
 
-常见原因是对终端容器使用了 `onWheelCapture + stopPropagation`，会阻断事件到达 xterm viewport。
+如果画面像是成功了，但断言仍失败，或反过来，优先直接读取持久化状态确认真实结果。
 
-修复策略：
+这通常能快速区分：
 
-- 改为 `onWheel`（冒泡阶段）里 `stopPropagation`；
-- 保留 xterm 默认滚动行为，同时阻断 ReactFlow 的缩放处理。
+- 是事件根本没触发
+- 是 UI 更新了但没持久化
+- 是持久化已更新但断言时机不对
 
-E2E 断言注意：
+## 高频症状速查
 
-- 不要依赖 `.xterm-helper-textarea` 的可见性断言，它在部分时序下会处于 hidden 但输入链路正常。
-- 采用 `.xterm-screen` 点击聚焦后再用 `window.keyboard` 输入，可显著降低假失败。
+### 终端交互后空白 / 整块重渲染
 
-对应用例：
+优先检查：
 
-- `tests/e2e/workspace-canvas.spec.ts` 中 `wheel over terminal scrolls terminal viewport`。
+- `WorkspaceCanvas` 的 `nodeTypes` 是否保持稳定引用
+- `TerminalNode` 是否只在必要时重建 xterm 实例
+- 拖拽/缩放是否仅更新位置与尺寸，而不是替换节点身份
+- 当前 E2E 是否使用了最新 `out/` 产物
 
-### 症状 3：拖动 resize 时终端内容错位/花屏
+### 切换 workspace 或重启应用后终端历史丢失
 
-常见原因是：拖拽 resize 过程中频繁触发 `fit + refresh + resize`，会干扰 Codex/Claude Code 的 TUI 重绘。
+优先检查：
 
-修复策略：
+- 主进程是否维护 PTY 输出快照
+- 是否提供并使用 `pty:snapshot`
+- 渲染层是否持久化 `scrollback`
+- 挂载时是否合并 `persisted scrollback` 与 `pty snapshot`
+- 输出回写是否做了节流，且回调引用是否稳定
 
-1. resize 拖拽期间只更新节点外框预览尺寸，不执行 xterm `fit/refresh`。
-2. 鼠标释放后再执行一次 `fit + pty.resize`（单次提交）。
-3. `scrollback` 状态更新与布局同步事件分离，避免拖拽过程重复触发布局重排。
-4. 交互上改为“单方向缩放”：右边手柄仅改宽度，底边手柄仅改高度。
+### 终端滚轮既没缩放画布，也没滚动终端
 
-对应用例：
+优先检查：
 
-- `tests/e2e/workspace-canvas.spec.ts` 中 `keeps terminal visible after drag, resize, and node interactions`。
-- `tests/e2e/workspace-canvas.spec.ts` 中 `keeps agent tui visible while dragging window`。
+- 是否错误使用了 `onWheelCapture + stopPropagation`
+- 是否应改为冒泡阶段的 `onWheel`
+- 是否阻断了 React Flow，同时保留了 xterm 默认滚动
+
+## 一句话原则
+
+- **先确认是不是旧构建，再怀疑代码。**
+- **先看 trace 和持久化状态，再猜 UI。**
+- **复杂拖拽先信真实鼠标事件，不要先信 `dragTo()`。**

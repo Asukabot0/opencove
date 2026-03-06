@@ -373,7 +373,6 @@ export function WorkspaceCanvasView({
         confirmTaskDelete={confirmTaskDelete}
       />
 
-
       <SpaceWorktreeWindow
         spaceId={spaceWorktreeSpaceId}
         spaces={spaces}

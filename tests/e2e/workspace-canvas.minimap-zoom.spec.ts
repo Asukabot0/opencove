@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragLocatorTo,
   launchApp,
   readCanvasViewport,
   seededWorkspaceId,
@@ -92,7 +93,7 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await expect(pane).toBeVisible()
 
-      await header.dragTo(pane, {
+      await dragLocatorTo(window, header, pane, {
         sourcePosition: { x: 120, y: 16 },
         targetPosition: { x: 680, y: 420 },
       })
@@ -103,7 +104,9 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
         })
         .toBeGreaterThan(1.01)
 
-      await terminal.locator('.terminal-node__terminal').click()
+      await terminal.locator('.terminal-node__terminal').click({
+        position: { x: 48, y: 48 },
+      })
 
       await expect
         .poll(async () => {
@@ -147,7 +150,9 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
 
       const firstTerminal = window.locator('.terminal-node').filter({ hasText: 'terminal-zoom-1' })
       await expect(firstTerminal).toBeVisible()
-      await firstTerminal.locator('.terminal-node__terminal').click()
+      await firstTerminal.locator('.terminal-node__terminal').click({
+        position: { x: 48, y: 48 },
+      })
 
       await expect
         .poll(async () => {
@@ -157,7 +162,9 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
 
       const secondTerminal = window.locator('.terminal-node').filter({ hasText: 'terminal-zoom-2' })
       await expect(secondTerminal).toBeVisible()
-      await secondTerminal.locator('.terminal-node__terminal').click()
+      await secondTerminal.locator('.terminal-node__terminal').click({
+        position: { x: 48, y: 48 },
+      })
 
       const readCenterDelta = async (): Promise<{ dx: number; dy: number }> => {
         const canvasBox = await window.locator('.workspace-canvas .react-flow').boundingBox()

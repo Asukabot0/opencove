@@ -40,7 +40,7 @@ export default function App(): React.JSX.Element {
     setActiveWorkspaceId,
   })
 
-  const { providerModelCatalog, refreshProviderModels } = useProviderModelCatalog({
+  const { providerModelCatalog } = useProviderModelCatalog({
     isSettingsOpen,
   })
 
@@ -434,9 +434,6 @@ export default function App(): React.JSX.Element {
           workspaces={workspaces}
           onWorkspaceWorktreesRootChange={(id, root) => {
             handleAnyWorkspaceWorktreesRootChange(id, root)
-          }}
-          onRefreshProviderModels={provider => {
-            void refreshProviderModels(provider)
           }}
           onChange={next => {
             setAgentSettings(next)

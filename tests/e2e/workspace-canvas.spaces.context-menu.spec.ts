@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragLocatorTo,
   launchApp,
   readCanvasViewport,
   storageKey,
@@ -108,7 +109,7 @@ test.describe('Workspace Canvas - Spaces (Menu & Switch)', () => {
         throw new Error('workspace pane bounding box unavailable')
       }
 
-      await header.dragTo(pane, {
+      await dragLocatorTo(window, header, pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: {
           x: 120,

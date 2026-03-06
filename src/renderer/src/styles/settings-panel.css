@@ -169,11 +169,11 @@
 
 .cove-toggle__slider {
   position: absolute;
-  cursor: pointer;
   inset: 0;
   background-color: #222;
   transition: 0.2s;
   border-radius: 20px;
+  pointer-events: none;
 }
 
 .cove-toggle__slider:before {

@@ -47,7 +47,9 @@ test.describe('Workspace Canvas - Agent Launcher', () => {
       )
       await expect(window.locator('.workspace-sidebar .workspace-agent-item')).toHaveCount(1)
       await expect(
-        window.locator('.workspace-sidebar .workspace-agent-item .workspace-agent-item__status--agent'),
+        window.locator(
+          '.workspace-sidebar .workspace-agent-item .workspace-agent-item__status--agent',
+        ),
       ).toHaveText('Standby')
     } finally {
       await electronApp.close()

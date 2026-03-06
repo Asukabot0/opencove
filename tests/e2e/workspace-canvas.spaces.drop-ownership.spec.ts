@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragLocatorTo,
   launchApp,
   storageKey,
   testWorkspacePath,
@@ -49,7 +50,7 @@ test.describe('Workspace Canvas - Spaces (Drop Ownership)', () => {
       const rootNode = window.locator('.terminal-node').filter({ hasText: 'terminal-root' }).first()
       await expect(rootNode).toBeVisible()
 
-      await rootNode.locator('.terminal-node__header').dragTo(pane, {
+      await dragLocatorTo(window, rootNode.locator('.terminal-node__header'), pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: { x: 520, y: 320 },
       })
@@ -86,7 +87,7 @@ test.describe('Workspace Canvas - Spaces (Drop Ownership)', () => {
         })
         .toBe(true)
 
-      await rootNode.locator('.terminal-node__header').dragTo(pane, {
+      await dragLocatorTo(window, rootNode.locator('.terminal-node__header'), pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: { x: 80, y: 760 },
       })
@@ -165,7 +166,7 @@ test.describe('Workspace Canvas - Spaces (Drop Ownership)', () => {
         .first()
       await expect(boundaryNode).toBeVisible()
 
-      await boundaryNode.locator('.terminal-node__header').dragTo(pane, {
+      await dragLocatorTo(window, boundaryNode.locator('.terminal-node__header'), pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: { x: 350, y: 340 },
       })
@@ -281,7 +282,7 @@ test.describe('Workspace Canvas - Spaces (Drop Ownership)', () => {
         .first()
       await expect(draggedNode).toBeVisible()
 
-      await draggedNode.locator('.terminal-node__header').dragTo(pane, {
+      await dragLocatorTo(window, draggedNode.locator('.terminal-node__header'), pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: { x: 440, y: 700 },
       })

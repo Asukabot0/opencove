@@ -96,7 +96,6 @@ export interface TrackpadGestureLockState {
   lastTimestamp: number
 }
 
-
 export interface TaskCreatorState {
   anchor: Point
   title: string

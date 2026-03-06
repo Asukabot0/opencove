@@ -157,7 +157,9 @@ test.describe('Workspace Canvas - Persistence', () => {
       const restoredTerminal = window.locator('.terminal-node').first()
       await expect(restoredTerminal).toContainText(tailToken, { timeout: 20_000 })
 
-      const restoredScrollbar = restoredTerminal.locator('.xterm-scrollable-element .scrollbar.vertical')
+      const restoredScrollbar = restoredTerminal.locator(
+        '.xterm-scrollable-element .scrollbar.vertical',
+      )
       const restoredSlider = restoredScrollbar.locator('.slider')
       await expect(restoredSlider).toBeVisible()
 

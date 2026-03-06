@@ -253,6 +253,9 @@ export function TaskNode({
 
       <div className="task-node__header" data-node-drag-handle="true">
         <div className="task-node__header-main">
+          <span className="task-node__title task-node__title-proxy" aria-hidden="true">
+            {titleDraft}
+          </span>
           <input
             className="task-node__title-input nodrag nowheel"
             data-testid="task-node-inline-title-input"

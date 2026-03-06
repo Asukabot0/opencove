@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragLocatorTo,
   launchApp,
   storageKey,
   testWorkspacePath,
@@ -52,7 +53,7 @@ test.describe('Workspace Canvas - Spaces (Crowded Drop)', () => {
         .first()
       await expect(draggedNode).toBeVisible()
 
-      await draggedNode.locator('.terminal-node__header').dragTo(pane, {
+      await dragLocatorTo(window, draggedNode.locator('.terminal-node__header'), pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: { x: 220, y: 220 },
       })
@@ -274,8 +275,9 @@ test.describe('Workspace Canvas - Spaces (Crowded Drop)', () => {
       await expect(window.locator('.react-flow__selection')).toHaveCount(0)
       const selectionRect = window.locator('.react-flow__nodesselection-rect')
       await expect(selectionRect).toBeVisible()
+      await window.waitForTimeout(150)
 
-      await selectionRect.dragTo(pane, {
+      await dragLocatorTo(window, selectionRect, pane, {
         targetPosition: { x: 220, y: 220 },
       })
 
@@ -396,7 +398,21 @@ test.describe('Workspace Canvas - Spaces (Crowded Drop)', () => {
         )
       }
 
-      await expect.poll(assertSpaceStable).toBe(true)
+      const waitForSpaceStable = async (attemptsRemaining: number): Promise<boolean> => {
+        if (await assertSpaceStable()) {
+          return true
+        }
+
+        if (attemptsRemaining <= 1) {
+          return false
+        }
+
+        await window.waitForTimeout(250)
+        return await waitForSpaceStable(attemptsRemaining - 1)
+      }
+
+      expect(await waitForSpaceStable(12)).toBe(true)
+
       await window.waitForTimeout(350)
       expect(await assertSpaceStable()).toBe(true)
 

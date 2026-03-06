@@ -85,8 +85,12 @@ function TerminalNodeType({
             }
           : undefined
       }
-      onInteractionStart={() => {
+      onInteractionStart={options => {
         selectNode(id)
+        if (options?.normalizeViewport === false) {
+          return
+        }
+
         normalizeViewportForTerminalInteractionRef.current(id)
       }}
     />

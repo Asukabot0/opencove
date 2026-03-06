@@ -112,12 +112,6 @@
     inset 0 0 0 1px rgba(170, 235, 255, 0.34),
     0 0 0 1px rgba(95, 178, 255, 0.44),
     0 0 22px rgba(95, 178, 255, 0.38);
-  pointer-events: auto;
-  cursor: grab;
-}
-
-.workspace-space-region--selected:active {
-  cursor: grabbing;
 }
 
 .workspace-space-region__label-group {
@@ -220,6 +214,18 @@
 
 .workspace-canvas .react-flow__nodes {
   z-index: 1;
+}
+
+.workspace-space-region__move-handle {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.workspace-space-region__move-handle:active {
+  cursor: grabbing;
 }
 
 .workspace-space-region__drag-handle {
@@ -355,4 +361,3 @@
     0 16px 34px rgba(0, 0, 0, 0.52),
     0 0 24px rgba(132, 214, 255, 0.4);
 }
-

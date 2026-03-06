@@ -56,37 +56,55 @@ export function TerminalNodeHeader({
   return (
     <div className="terminal-node__header" data-node-drag-handle="true">
       {isTitleEditable ? (
-        <input
-          className="terminal-node__title terminal-node__title-input nodrag nowheel"
-          data-testid="terminal-node-inline-title-input"
-          value={titleDraft}
-          onFocus={() => {
-            setIsTitleEditing(true)
-          }}
-          onPointerDown={event => {
-            event.stopPropagation()
-          }}
-          onChange={event => {
-            setTitleDraft(event.target.value)
-          }}
-          onBlur={() => {
-            commitTitleEdit()
-            setIsTitleEditing(false)
-          }}
-          onKeyDown={event => {
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              cancelTitleEdit()
-              event.currentTarget.blur()
-              return
-            }
+        isTitleEditing ? (
+          <>
+            <span className="terminal-node__title terminal-node__title-proxy" aria-hidden="true">
+              {titleDraft}
+            </span>
+            <input
+              className="terminal-node__title-input nodrag nowheel"
+              data-testid="terminal-node-inline-title-input"
+              value={titleDraft}
+              autoFocus
+              onFocus={() => {
+                setIsTitleEditing(true)
+              }}
+              onPointerDown={event => {
+                event.stopPropagation()
+              }}
+              onChange={event => {
+                setTitleDraft(event.target.value)
+              }}
+              onBlur={() => {
+                commitTitleEdit()
+                setIsTitleEditing(false)
+              }}
+              onKeyDown={event => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  cancelTitleEdit()
+                  event.currentTarget.blur()
+                  return
+                }
 
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              event.currentTarget.blur()
-            }
-          }}
-        />
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                }
+              }}
+            />
+          </>
+        ) : (
+          <span
+            className="terminal-node__title"
+            onDoubleClick={event => {
+              event.stopPropagation()
+              setIsTitleEditing(true)
+            }}
+          >
+            {titleDraft}
+          </span>
+        )
       ) : (
         <span className="terminal-node__title">{title}</span>
       )}
@@ -96,7 +114,8 @@ export function TerminalNodeHeader({
           {directoryMismatch ? (
             <span
               className="terminal-node__badge terminal-node__badge--warning"
-              title={`Bound directory: ${directoryMismatch.executionDirectory}\nCurrent directory: ${directoryMismatch.expectedDirectory}`}
+              title={`Bound directory: ${directoryMismatch.executionDirectory}
+Current directory: ${directoryMismatch.expectedDirectory}`}
             >
               DIR MISMATCH
             </span>

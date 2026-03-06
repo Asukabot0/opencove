@@ -187,13 +187,38 @@ export function useWorkspaceCanvasTaskCreator({
     )
 
     try {
-      const title = titleInput.length > 0 ? titleInput : fallbackTaskTitle(requirement)
+      const shouldAutoFillTitle = titleInput.length === 0
+      const shouldAutoFillPriority = priority === 'medium'
+      const shouldAutoFillTags = selectedTags.length === 0
+
+      const shouldAutoFill =
+        taskCreator.autoGenerateTitle &&
+        (shouldAutoFillTitle || shouldAutoFillPriority || shouldAutoFillTags)
+
+      const prefilledSuggestion = shouldAutoFill
+        ? await suggestTaskTitle(requirement).catch(() => null)
+        : null
+
+      const title =
+        titleInput.length > 0
+          ? titleInput
+          : (prefilledSuggestion?.title ?? fallbackTaskTitle(requirement))
+
+      if (prefilledSuggestion) {
+        if (shouldAutoFillPriority) {
+          priority = prefilledSuggestion.priority
+        }
+
+        if (shouldAutoFillTags) {
+          selectedTags = prefilledSuggestion.tags
+        }
+      }
 
       const created = createTaskNode(
         taskCreator.anchor,
         title,
         requirement,
-        false,
+        shouldAutoFillTitle && prefilledSuggestion !== null,
         priority,
         selectedTags,
       )
@@ -286,15 +311,12 @@ export function useWorkspaceCanvasTaskCreator({
 
       setTaskCreator(null)
 
-      const shouldAutoFillTitle = titleInput.length === 0
-      const shouldAutoFillPriority = priority === 'medium'
-      const shouldAutoFillTags = selectedTags.length === 0
-
-      const shouldAutoFill =
-        taskCreator.autoGenerateTitle &&
-        (shouldAutoFillTitle || shouldAutoFillPriority || shouldAutoFillTags)
-
-      if (!shouldAutoFill || created.data.kind !== 'task' || !created.data.task) {
+      if (
+        !shouldAutoFill ||
+        prefilledSuggestion !== null ||
+        created.data.kind !== 'task' ||
+        !created.data.task
+      ) {
         return
       }
 

@@ -29,6 +29,36 @@ function hasCrashSignature(output) {
   return CRASH_SIGNATURE_PATTERNS.some(pattern => pattern.test(output))
 }
 
+function resolveWindowMode(rawValue) {
+  const normalized = rawValue?.toLowerCase()
+  if (
+    normalized === 'hidden' ||
+    normalized === 'offscreen' ||
+    normalized === 'inactive' ||
+    normalized === 'normal'
+  ) {
+    return normalized
+  }
+
+  return 'offscreen'
+}
+
+function resolveFallbackWindowMode(windowMode) {
+  if (windowMode === 'hidden') {
+    return 'offscreen'
+  }
+
+  if (windowMode === 'offscreen') {
+    return 'inactive'
+  }
+
+  if (windowMode === 'inactive') {
+    return 'normal'
+  }
+
+  return null
+}
+
 function writeStderr(message) {
   process.stderr.write(`${message}\n`)
 }
@@ -79,8 +109,14 @@ async function main() {
     process.exit(buildResult.code)
   }
 
+  const currentWindowMode = resolveWindowMode(process.env['COVE_E2E_WINDOW_MODE'])
+  const fallbackWindowMode = resolveFallbackWindowMode(currentWindowMode)
+
   const firstRunArgs = ['exec', 'playwright', 'test', ...forwardedArgs]
-  const firstRun = await runCommand(firstRunArgs)
+  const firstRun = await runCommand(firstRunArgs, {
+    ...process.env,
+    COVE_E2E_WINDOW_MODE: currentWindowMode,
+  })
   if (firstRun.code === 0) {
     process.exit(0)
   }
@@ -93,18 +129,22 @@ async function main() {
     process.exit(firstRun.code)
   }
 
+  if (!fallbackWindowMode) {
+    process.exit(firstRun.code)
+  }
+
   writeStderr(
-    '[e2e-fallback] Detected crash-like failure in hidden mode. Rerunning last failed tests with COVE_E2E_WINDOW_MODE=offscreen...',
+    `[e2e-fallback] Detected crash-like failure in ${currentWindowMode} mode. Rerunning last failed tests with COVE_E2E_WINDOW_MODE=${fallbackWindowMode}...`,
   )
 
   const fallbackRun = await runCommand(['exec', 'playwright', 'test', '--last-failed'], {
     ...process.env,
-    COVE_E2E_WINDOW_MODE: 'offscreen',
+    COVE_E2E_WINDOW_MODE: fallbackWindowMode,
   })
 
   if (fallbackRun.code === 0) {
     writeStderr(
-      '[e2e-fallback] Recovered by running failed tests in offscreen mode. Investigate hidden-mode compatibility for long-term fix.',
+      `[e2e-fallback] Recovered by running failed tests in ${fallbackWindowMode} mode. Investigate ${currentWindowMode}-mode compatibility for long-term fix.`,
     )
     process.exit(0)
   }

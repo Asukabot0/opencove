@@ -165,6 +165,7 @@ function createWindow(): void {
   const keepRendererActiveInBackground = e2eWindowMode !== 'normal'
   const keepRendererActiveWhenHidden = e2eWindowMode === 'hidden'
   const placeWindowOffscreen = e2eWindowMode === 'offscreen'
+  const disableRendererSandboxForTests = process.env['NODE_ENV'] === 'test'
 
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -178,7 +179,7 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: !disableRendererSandboxForTests,
       ...(keepRendererActiveInBackground ? { backgroundThrottling: false } : {}),
     },
   })

@@ -21,7 +21,7 @@ export function TaskTagsSection(props: {
           <span>Common tags used to categorize and filter tasks.</span>
         </div>
 
-        <div className="settings-list-container">
+        <div className="settings-list-container" data-testid="settings-task-tag-list">
           {tags.map(tag => (
             <div className="settings-list-item" key={tag}>
               <span style={{ fontSize: '13px', color: '#ccc' }}>{tag}</span>
@@ -29,6 +29,7 @@ export function TaskTagsSection(props: {
                 type="button"
                 className="secondary"
                 style={{ padding: '2px 8px', fontSize: '11px' }}
+                data-testid={`settings-task-tag-remove-${tag}`}
                 disabled={tags.length <= 1}
                 onClick={() => onRemoveTag(tag)}
               >
@@ -42,6 +43,7 @@ export function TaskTagsSection(props: {
           <input
             type="text"
             style={{ flex: 1 }}
+            data-testid="settings-task-tag-add-input"
             value={addTaskTagInput}
             placeholder="Add new tag..."
             onChange={event => onChangeAddTaskTagInput(event.target.value)}
@@ -50,6 +52,7 @@ export function TaskTagsSection(props: {
           <button
             type="button"
             className="primary"
+            data-testid="settings-task-tag-add-button"
             disabled={addTaskTagInput.trim().length === 0}
             onClick={() => onAddTag()}
           >

@@ -385,8 +385,7 @@ export function useWorkspaceCanvasNodesStore({
           width: defaultSize.width,
           height: defaultSize.height,
           kind,
-          status:
-            kind === 'agent' ? resolveInitialAgentRuntimeStatus(agent?.prompt) : null,
+          status: kind === 'agent' ? resolveInitialAgentRuntimeStatus(agent?.prompt) : null,
           startedAt: kind === 'agent' ? now : null,
           endedAt: null,
           exitCode: null,

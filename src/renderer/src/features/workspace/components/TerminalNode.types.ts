@@ -16,5 +16,5 @@ export interface TerminalNodeProps {
   onScrollbackChange?: (scrollback: string) => void
   onTitleCommit?: (title: string) => void
   onCommandRun?: (command: string) => void
-  onInteractionStart?: () => void
+  onInteractionStart?: (options?: { normalizeViewport?: boolean }) => void
 }

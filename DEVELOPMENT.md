@@ -39,6 +39,8 @@
     -   生成代码（如自动生成的类型定义等）禁止手改。
 -   **提交前检查（与 CI 对齐的最低门槛）**：
     -   执行 `pnpm pre-commit` （type, lint, format, test）
+-   **测试失败排查前置**：
+    -   凡遇到 `pnpm pre-commit`、`pnpm test -- --run`、`pnpm test:e2e` 或单独 `Playwright` 用例失败，继续排查前**必须先阅读** `docs/DEBUGGING.md`。
 -   **安全（Electron Security）**：
     -   始终开启 Context Isolation。
     -   Renderer 进程禁止开启 Node Integration。
@@ -53,7 +55,7 @@
     - 如需自定义 dev 的数据目录：`COVE_DEV_USER_DATA_DIR=/path/to/userData pnpm dev`
 -   **运行单元测试**：`pnpm test -- --run`
 -   **运行 E2E 测试**：`pnpm test:e2e`
-    -   说明：`pnpm test:e2e` 已包含构建步骤，并在检测到 `hidden` 模式下的 Electron 崩溃特征时自动降级为 `offscreen` 重跑失败用例。
+    -   说明：`pnpm test:e2e` 已包含构建步骤，默认使用 `offscreen` 后台窗口模式；检测到 Electron 崩溃特征时，会按窗口模式链路自动降级并重跑失败用例（例如 `hidden -> offscreen`、`offscreen -> inactive`）。
     -   可通过 `COVE_E2E_WINDOW_MODE` 指定窗口模式（`normal / inactive / offscreen / hidden`）。
     -   如需关闭自动降级，可设置 `COVE_E2E_DISABLE_CRASH_FALLBACK=1`。
     -   若需单独执行 Playwright（如 `pnpm exec playwright test tests/e2e/xxx.spec.ts`），必须先执行 `pnpm build`，否则可能仍会使用旧的 `out/` 产物，导致结果与当前源码不一致。

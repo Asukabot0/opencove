@@ -83,6 +83,23 @@ function WorkspaceCanvasInner({
   const trackpadGestureLockRef = useRef<TrackpadGestureLockState | null>(null)
   const viewportRef = useRef<Viewport>(viewport)
   const [spaceWorktreeSpaceId, setSpaceWorktreeSpaceId] = useState<string | null>(null)
+  const flowNodes = useMemo(() => {
+    return nodes.map(node => {
+      if (node.data.kind === 'note') {
+        return node
+      }
+
+      const dragHandle = '[data-node-drag-handle="true"]'
+      if (node.dragHandle === dragHandle) {
+        return node
+      }
+
+      return {
+        ...node,
+        dragHandle,
+      }
+    })
+  }, [nodes])
   const {
     nodesRef,
     isNodeDraggingRef,
@@ -102,7 +119,7 @@ function WorkspaceCanvasInner({
     createNoteNode,
     createTaskNode,
   } = useWorkspaceCanvasNodesStore({
-    nodes,
+    nodes: flowNodes,
     spacesRef,
     onNodesChange,
     onSpacesChange,
@@ -135,7 +152,7 @@ function WorkspaceCanvasInner({
     workspaceId,
     workspacePath,
     reactFlow,
-    nodes,
+    nodes: flowNodes,
     nodesRef,
     setNodes,
     spaces,
@@ -304,6 +321,9 @@ function WorkspaceCanvasInner({
     nodesRef,
   })
   useLayoutEffect(() => {
+    selectedNodeIdsRef.current = selectedNodeIds
+  }, [selectedNodeIds])
+  useLayoutEffect(() => {
     selectedSpaceIdsRef.current = selectedSpaceIds
   }, [selectedSpaceIds])
   useWorkspaceCanvasSyncActionRefs({
@@ -380,6 +400,7 @@ function WorkspaceCanvasInner({
     spacesRef,
     selectedSpaceIdsRef,
     onSpacesChange,
+    onRequestPersistFlush,
   })
 
   const taskTitleProviderLabel = AGENT_PROVIDER_LABEL[resolveTaskTitleProvider(agentSettings)],
@@ -389,12 +410,12 @@ function WorkspaceCanvasInner({
 
   const { taskAssignerAgentOptions, activeTaskForAssigner } = useWorkspaceCanvasTaskAssignerOptions(
     {
-      nodes,
+      nodes: flowNodes,
       taskAssigner,
     },
   )
 
-  const taskAgentEdges = useWorkspaceCanvasTaskAgentEdges(nodes)
+  const taskAgentEdges = useWorkspaceCanvasTaskAgentEdges(flowNodes)
 
   return (
     <WorkspaceCanvasView
@@ -410,7 +431,7 @@ function WorkspaceCanvasInner({
       handleCanvasPointerUpCapture={handleCanvasPointerUpCapture}
       handleCanvasDoubleClickCapture={handleCanvasDoubleClickCapture}
       handleCanvasWheelCapture={handleCanvasWheelCapture}
-      nodes={nodes}
+      nodes={flowNodes}
       edges={taskAgentEdges}
       nodeTypes={nodeTypes}
       onNodesChange={applyChanges}

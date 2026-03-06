@@ -18,7 +18,6 @@ export function ModelOverrideSection(props: {
   settings: AgentSettings
   modelCatalogByProvider: Record<AgentProvider, ProviderModelCatalogEntry>
   addModelInputByProvider: Record<AgentProvider, string>
-  onRefreshProviderModels: (provider: AgentProvider) => void
   onToggleCustomModelEnabled: (provider: AgentProvider, enabled: boolean) => void
   onSelectProviderModel: (provider: AgentProvider, model: string) => void
   onRemoveCustomModelOption: (provider: AgentProvider, model: string) => void
@@ -83,6 +82,7 @@ export function ModelOverrideSection(props: {
                 <label className="cove-toggle">
                   <input
                     type="checkbox"
+                    data-testid={`settings-custom-model-enabled-${provider}`}
                     checked={customEnabled}
                     onChange={event => onToggleCustomModelEnabled(provider, event.target.checked)}
                   />
@@ -93,7 +93,10 @@ export function ModelOverrideSection(props: {
 
             {customEnabled && (
               <div style={{ marginTop: '8px' }}>
-                <div className="settings-list-container">
+                <div
+                  className="settings-list-container"
+                  data-testid={`settings-model-list-${provider}`}
+                >
                   {allModels.map(model => (
                     <div className="settings-list-item" key={model}>
                       <label className="settings-list-item__left">
@@ -123,6 +126,7 @@ export function ModelOverrideSection(props: {
                   <input
                     type="text"
                     style={{ flex: 1 }}
+                    data-testid={`settings-custom-model-add-input-${provider}`}
                     value={addInputValue}
                     placeholder="Add model..."
                     onChange={event => onChangeAddModelInput(provider, event.target.value)}
@@ -131,6 +135,7 @@ export function ModelOverrideSection(props: {
                   <button
                     type="button"
                     className="primary"
+                    data-testid={`settings-custom-model-add-button-${provider}`}
                     disabled={addInputValue.trim().length === 0}
                     onClick={() => onAddCustomModelOption(provider)}
                   >

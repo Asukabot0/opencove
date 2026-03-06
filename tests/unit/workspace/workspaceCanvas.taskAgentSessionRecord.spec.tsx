@@ -80,7 +80,9 @@ describe('WorkspaceCanvas task agent session record', () => {
   it('persists a history record when a linked agent node is closed', async () => {
     const kill = vi.fn(async () => undefined)
     const onExit = vi.fn(() => () => undefined)
-    let metadataListener: ((event: { sessionId: string; resumeSessionId: string | null }) => void) | null = null
+    let metadataListener:
+      | ((event: { sessionId: string; resumeSessionId: string | null }) => void)
+      | null = null
 
     Object.defineProperty(window, 'coveApi', {
       configurable: true,
@@ -90,10 +92,12 @@ describe('WorkspaceCanvas task agent session record', () => {
           kill,
           onExit,
           onState: vi.fn(() => () => undefined),
-          onMetadata: vi.fn((listener: (event: { sessionId: string; resumeSessionId: string | null }) => void) => {
-            metadataListener = listener
-            return () => undefined
-          }),
+          onMetadata: vi.fn(
+            (listener: (event: { sessionId: string; resumeSessionId: string | null }) => void) => {
+              metadataListener = listener
+              return () => undefined
+            },
+          ),
         },
         agent: {
           launch: vi.fn(async () => {

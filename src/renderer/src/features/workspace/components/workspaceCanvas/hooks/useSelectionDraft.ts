@@ -11,6 +11,7 @@ interface UseSelectionDraftParams {
   selectionDraftRef: MutableRefObject<SelectionDraftState | null>
   reactFlow: ReactFlowInstance<Node<TerminalNodeData>>
   spacesRef: MutableRefObject<WorkspaceSpaceState[]>
+  selectedNodeIdsRef: MutableRefObject<string[]>
   selectedSpaceIdsRef: MutableRefObject<string[]>
   setNodes: (
     updater: (prevNodes: Node<TerminalNodeData>[]) => Node<TerminalNodeData>[],
@@ -28,6 +29,7 @@ export function useWorkspaceCanvasSelectionDraft({
   selectionDraftRef,
   reactFlow,
   spacesRef,
+  selectedNodeIdsRef,
   selectedSpaceIdsRef,
   setNodes,
   setSelectedNodeIds,
@@ -252,11 +254,8 @@ export function useWorkspaceCanvasSelectionDraft({
         currentX: event.clientX,
         currentY: event.clientY,
         additive: event.shiftKey || isShiftPressedRef.current,
-        selectedNodeIdsAtStart: reactFlow
-          .getNodes()
-          .filter(node => Boolean(node.selected))
-          .map(node => node.id),
-        selectedSpaceIdsAtStart: selectedSpaceIdsRef.current,
+        selectedNodeIdsAtStart: [...selectedNodeIdsRef.current],
+        selectedSpaceIdsAtStart: [...selectedSpaceIdsRef.current],
         startSpaceId: startSpace?.id ?? null,
       }
       setContextMenu(null)
@@ -266,6 +265,7 @@ export function useWorkspaceCanvasSelectionDraft({
       isShiftPressedRef,
       isTrackpadCanvasMode,
       reactFlow,
+      selectedNodeIdsRef,
       selectedSpaceIdsRef,
       selectionDraftRef,
       spacesRef,

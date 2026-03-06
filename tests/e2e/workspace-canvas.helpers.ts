@@ -1,4 +1,9 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import {
+  _electron as electron,
+  type ElectronApplication,
+  type Locator,
+  type Page,
+} from '@playwright/test'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'path'
@@ -8,6 +13,49 @@ export const testWorkspacePath = path.resolve(__dirname, '../../')
 export const storageKey = 'cove:m0:workspace-state'
 export const seededWorkspaceId = 'workspace-seeded'
 type E2EWindowMode = 'normal' | 'inactive' | 'offscreen' | 'hidden'
+
+function isTruthyEnv(rawValue: string | undefined): boolean {
+  if (!rawValue) {
+    return false
+  }
+
+  return rawValue === '1' || rawValue.toLowerCase() === 'true'
+}
+
+function isRetryableLaunchError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return (
+    message.includes('Process failed to launch') ||
+    message.includes('SIGABRT') ||
+    message.includes('SIGSEGV') ||
+    message.includes('Target page, context or browser has been closed')
+  )
+}
+
+function resolveLaunchModes(windowMode?: E2EWindowMode): E2EWindowMode[] {
+  const requestedMode =
+    windowMode ?? (process.env['COVE_E2E_WINDOW_MODE'] as E2EWindowMode | undefined) ?? 'offscreen'
+
+  if (isTruthyEnv(process.env['COVE_E2E_DISABLE_CRASH_FALLBACK'])) {
+    return [requestedMode]
+  }
+
+  const candidates: E2EWindowMode[] = [requestedMode]
+
+  if (requestedMode === 'hidden') {
+    candidates.push('offscreen', 'inactive', 'normal')
+  } else if (requestedMode === 'offscreen') {
+    candidates.push('inactive', 'normal')
+  }
+
+  return [...new Set(candidates)]
+}
+
+async function delay(ms: number): Promise<void> {
+  await new Promise(resolve => {
+    setTimeout(resolve, ms)
+  })
+}
 
 async function createTestUserDataDir(): Promise<string> {
   return await mkdtemp(path.join(tmpdir(), 'cove-e2e-user-data-'))
@@ -78,11 +126,12 @@ export interface SeedWorkspace {
   activeSpaceId?: string | null
 }
 
-export async function launchApp(options?: {
-  windowMode?: E2EWindowMode
-}): Promise<{ electronApp: ElectronApplication; window: Page }> {
+async function launchAppInMode(
+  launchMode: E2EWindowMode,
+  attempt = 0,
+): Promise<{ electronApp: ElectronApplication; window: Page }> {
   const userDataDir = await createTestUserDataDir()
-  let electronApp: ElectronApplication
+  let electronApp: ElectronApplication | null = null
 
   try {
     electronApp = await electron.launch({
@@ -92,27 +141,64 @@ export async function launchApp(options?: {
         NODE_ENV: 'test',
         COVE_TEST_WORKSPACE: testWorkspacePath,
         COVE_TEST_USER_DATA_DIR: userDataDir,
-        ...(options?.windowMode ? { COVE_E2E_WINDOW_MODE: options.windowMode } : {}),
+        COVE_E2E_WINDOW_MODE: launchMode,
       },
     })
+
+    const originalClose = electronApp.close.bind(electronApp)
+    ;(electronApp as unknown as { close: () => Promise<void> }).close = async () => {
+      try {
+        await originalClose()
+      } finally {
+        await rm(userDataDir, { recursive: true, force: true })
+      }
+    }
+
+    const window = await electronApp.firstWindow()
+    await window.waitForLoadState('domcontentloaded')
+
+    return { electronApp, window }
   } catch (error) {
+    if (electronApp) {
+      await electronApp.close().catch(() => undefined)
+    }
     await rm(userDataDir, { recursive: true, force: true })
+
+    const shouldRetryCurrentMode = isRetryableLaunchError(error) && attempt < 1
+    if (shouldRetryCurrentMode) {
+      await delay(250)
+      return await launchAppInMode(launchMode, attempt + 1)
+    }
+
     throw error
   }
+}
 
-  const originalClose = electronApp.close.bind(electronApp)
-  ;(electronApp as unknown as { close: () => Promise<void> }).close = async () => {
-    try {
-      await originalClose()
-    } finally {
-      await rm(userDataDir, { recursive: true, force: true })
-    }
+async function launchAppWithModes(
+  launchModes: E2EWindowMode[],
+  index = 0,
+): Promise<{ electronApp: ElectronApplication; window: Page }> {
+  const launchMode = launchModes[index]
+  if (!launchMode) {
+    throw new Error('No E2E window mode available for Electron launch')
   }
 
-  const window = await electronApp.firstWindow()
-  await window.waitForLoadState('domcontentloaded')
+  try {
+    return await launchAppInMode(launchMode)
+  } catch (error) {
+    if (index >= launchModes.length - 1) {
+      throw error
+    }
 
-  return { electronApp, window }
+    return await launchAppWithModes(launchModes, index + 1)
+  }
+}
+
+export async function launchApp(options?: {
+  windowMode?: E2EWindowMode
+}): Promise<{ electronApp: ElectronApplication; window: Page }> {
+  const launchModes = resolveLaunchModes(options?.windowMode)
+  return await launchAppWithModes(launchModes)
 }
 
 export async function seedWorkspaceState(
@@ -238,6 +324,37 @@ export async function clearAndSeedWorkspace(
     ],
     settings: options?.settings,
   })
+}
+
+export async function dragLocatorTo(
+  window: Page,
+  source: Locator,
+  target: Locator,
+  options: {
+    sourcePosition?: { x: number; y: number }
+    targetPosition?: { x: number; y: number }
+    steps?: number
+  } = {},
+): Promise<void> {
+  const sourceBox = await source.boundingBox()
+  if (!sourceBox) {
+    throw new Error('source locator bounding box unavailable')
+  }
+
+  const targetBox = await target.boundingBox()
+  if (!targetBox) {
+    throw new Error('target locator bounding box unavailable')
+  }
+
+  const startX = sourceBox.x + (options.sourcePosition?.x ?? sourceBox.width / 2)
+  const startY = sourceBox.y + (options.sourcePosition?.y ?? sourceBox.height / 2)
+  const endX = targetBox.x + (options.targetPosition?.x ?? targetBox.width / 2)
+  const endY = targetBox.y + (options.targetPosition?.y ?? targetBox.height / 2)
+
+  await window.mouse.move(startX, startY)
+  await window.mouse.down()
+  await window.mouse.move(endX, endY, { steps: options.steps ?? 12 })
+  await window.mouse.up()
 }
 
 export async function readCanvasViewport(

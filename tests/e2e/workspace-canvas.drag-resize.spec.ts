@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragLocatorTo,
   launchApp,
   storageKey,
   testWorkspacePath,
@@ -42,7 +43,7 @@ test.describe('Workspace Canvas - Drag & Resize', () => {
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await expect(pane).toBeVisible()
 
-      await header.dragTo(pane, {
+      await dragLocatorTo(window, header, pane, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: { x: 520, y: 420 },
       })
@@ -179,7 +180,7 @@ test.describe('Workspace Canvas - Drag & Resize', () => {
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await expect(pane).toBeVisible()
 
-      await header.dragTo(pane, {
+      await dragLocatorTo(window, header, pane, {
         sourcePosition: { x: 120, y: 16 },
         targetPosition: { x: 680, y: 420 },
       })

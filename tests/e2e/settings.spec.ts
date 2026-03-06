@@ -26,7 +26,7 @@ test.describe('Settings', () => {
 
       const settingsButton = window.locator('.workspace-sidebar__settings')
       await expect(settingsButton).toBeVisible()
-      await settingsButton.click()
+      await settingsButton.click({ noWaitAfter: true })
 
       const generalNav = window.locator('[data-testid="settings-section-nav-general"]')
       const canvasNav = window.locator('[data-testid="settings-section-nav-canvas"]')

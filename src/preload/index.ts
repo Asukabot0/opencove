@@ -126,7 +126,10 @@ const coveApi = {
       }
     },
     onMetadata: (listener: (event: TerminalSessionMetadataEvent) => void): UnsubscribeFn => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: TerminalSessionMetadataEvent) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: TerminalSessionMetadataEvent,
+      ) => {
         listener(payload)
       }
 

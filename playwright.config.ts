@@ -1,8 +1,8 @@
 import { defineConfig } from '@playwright/test'
 
-// Electron E2E 默认隐藏窗口，避免界面干扰；可通过 COVE_E2E_WINDOW_MODE 覆盖。
+// Electron E2E 默认使用 offscreen 后台窗口，兼顾稳定性与避免界面干扰；可通过 COVE_E2E_WINDOW_MODE 覆盖。
 // 可选值：normal / inactive / offscreen / hidden。
-process.env['COVE_E2E_WINDOW_MODE'] = process.env['COVE_E2E_WINDOW_MODE'] ?? 'hidden'
+process.env['COVE_E2E_WINDOW_MODE'] = process.env['COVE_E2E_WINDOW_MODE'] ?? 'offscreen'
 
 /**
  * Playwright 配置 - Electron E2E 测试

@@ -122,6 +122,7 @@ export function CanvasSection(props: {
           <label className="cove-toggle">
             <input
               type="checkbox"
+              data-testid="settings-normalize-zoom-on-terminal-click"
               checked={normalizeZoomOnTerminalClick}
               onChange={event => onChangeNormalizeZoomOnTerminalClick(event.target.checked)}
             />
