@@ -61,7 +61,7 @@ async function delay(ms: number): Promise<void> {
   })
 }
 
-async function createTestUserDataDir(): Promise<string> {
+export async function createTestUserDataDir(): Promise<string> {
   return await mkdtemp(path.join(tmpdir(), 'cove-e2e-user-data-'))
 }
 
@@ -88,6 +88,7 @@ async function closeElectronAppAndCleanup(
   electronApp: ElectronApplication,
   originalClose: () => Promise<void>,
   userDataDir: string,
+  cleanupUserDataDir: boolean,
 ): Promise<void> {
   const appProcess = electronApp.process()
   const appPid = typeof appProcess.pid === 'number' && appProcess.pid > 0 ? appProcess.pid : null
@@ -115,7 +116,9 @@ async function closeElectronAppAndCleanup(
       await waitForProcessExit(appPid, E2E_APP_FORCE_KILL_TIMEOUT_MS).catch(() => undefined)
     }
 
-    await rm(userDataDir, { recursive: true, force: true })
+    if (cleanupUserDataDir) {
+      await rm(userDataDir, { recursive: true, force: true })
+    }
   }
 }
 
@@ -187,10 +190,15 @@ export interface SeedWorkspace {
 
 async function launchAppInMode(
   launchMode: E2EWindowMode,
-  env: Record<string, string | undefined> = {},
+  options: {
+    env?: Record<string, string | undefined>
+    userDataDir?: string
+    cleanupUserDataDir?: boolean
+  } = {},
   attempt = 0,
 ): Promise<{ electronApp: ElectronApplication; window: Page }> {
-  const userDataDir = await createTestUserDataDir()
+  const userDataDir = options.userDataDir ?? (await createTestUserDataDir())
+  const cleanupUserDataDir = options.cleanupUserDataDir ?? true
   const testHomeDir = path.join(userDataDir, 'home')
   await mkdir(testHomeDir, { recursive: true })
   let electronApp: ElectronApplication | null = null
@@ -207,14 +215,19 @@ async function launchAppInMode(
         COVE_TEST_USER_DATA_DIR: userDataDir,
         COVE_TEST_AGENT_STUB_SCRIPT: testAgentStubScriptPath,
         COVE_E2E_WINDOW_MODE: launchMode,
-        ...env,
+        ...options.env,
       },
     })
 
     const originalClose = electronApp.close.bind(electronApp)
     let closePromise: Promise<void> | null = null
     ;(electronApp as unknown as { close: () => Promise<void> }).close = async () => {
-      closePromise ??= closeElectronAppAndCleanup(electronApp, originalClose, userDataDir)
+      closePromise ??= closeElectronAppAndCleanup(
+        electronApp,
+        originalClose,
+        userDataDir,
+        cleanupUserDataDir,
+      )
       return await closePromise
     }
 
@@ -225,14 +238,14 @@ async function launchAppInMode(
   } catch (error) {
     if (electronApp) {
       await electronApp.close().catch(() => undefined)
-    } else {
+    } else if (cleanupUserDataDir) {
       await rm(userDataDir, { recursive: true, force: true })
     }
 
     const shouldRetryCurrentMode = isRetryableLaunchError(error) && attempt < 1
     if (shouldRetryCurrentMode) {
       await delay(250)
-      return await launchAppInMode(launchMode, env, attempt + 1)
+      return await launchAppInMode(launchMode, options, attempt + 1)
     }
 
     throw error
@@ -241,7 +254,11 @@ async function launchAppInMode(
 
 async function launchAppWithModes(
   launchModes: E2EWindowMode[],
-  env: Record<string, string | undefined> = {},
+  options: {
+    env?: Record<string, string | undefined>
+    userDataDir?: string
+    cleanupUserDataDir?: boolean
+  } = {},
   index = 0,
 ): Promise<{ electronApp: ElectronApplication; window: Page }> {
   const launchMode = launchModes[index]
@@ -250,22 +267,24 @@ async function launchAppWithModes(
   }
 
   try {
-    return await launchAppInMode(launchMode, env)
+    return await launchAppInMode(launchMode, options)
   } catch (error) {
     if (index >= launchModes.length - 1) {
       throw error
     }
 
-    return await launchAppWithModes(launchModes, env, index + 1)
+    return await launchAppWithModes(launchModes, options, index + 1)
   }
 }
 
 export async function launchApp(options?: {
   windowMode?: E2EWindowMode
   env?: Record<string, string | undefined>
+  userDataDir?: string
+  cleanupUserDataDir?: boolean
 }): Promise<{ electronApp: ElectronApplication; window: Page }> {
   const launchModes = resolveLaunchModes(options?.windowMode)
-  return await launchAppWithModes(launchModes, options?.env)
+  return await launchAppWithModes(launchModes, options)
 }
 
 export async function seedWorkspaceState(

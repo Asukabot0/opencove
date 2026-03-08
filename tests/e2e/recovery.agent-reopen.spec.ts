@@ -1,0 +1,461 @@
+import { expect, test, type Page } from '@playwright/test'
+import { rm } from 'node:fs/promises'
+import path from 'path'
+import {
+  clearAndSeedWorkspace,
+  createTestUserDataDir,
+  launchApp,
+  testWorkspacePath,
+} from './workspace-canvas.helpers'
+
+async function readWorkspaceStateRaw(window: Page): Promise<unknown | null> {
+  const raw = await window.evaluate(async () => {
+    return await window.coveApi.persistence.readWorkspaceStateRaw()
+  })
+
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw) as unknown
+  } catch {
+    return null
+  }
+}
+
+test.describe('Recovery - Agent reopen', () => {
+  test('reopens a blank agent window after app restart', async () => {
+    const userDataDir = await createTestUserDataDir()
+
+    try {
+      const { electronApp, window } = await launchApp({
+        windowMode: 'offscreen',
+        userDataDir,
+        cleanupUserDataDir: false,
+      })
+
+      try {
+        await clearAndSeedWorkspace(window, [], {
+          settings: {
+            defaultProvider: 'codex',
+            customModelEnabledByProvider: {
+              'claude-code': false,
+              codex: true,
+            },
+            customModelByProvider: {
+              'claude-code': '',
+              codex: 'gpt-5.2-codex',
+            },
+            customModelOptionsByProvider: {
+              'claude-code': [],
+              codex: ['gpt-5.2-codex'],
+            },
+          },
+        })
+
+        const pane = window.locator('.workspace-canvas .react-flow__pane')
+        await expect(pane).toBeVisible()
+
+        await pane.click({
+          button: 'right',
+          position: { x: 320, y: 220 },
+        })
+
+        const runButton = window.locator('[data-testid="workspace-context-run-default-agent"]')
+        await expect(runButton).toBeVisible()
+        await runButton.click()
+
+        await expect(window.locator('.terminal-node')).toHaveCount(1)
+        await expect(window.locator('.workspace-sidebar .workspace-agent-item')).toHaveCount(1)
+      } finally {
+        await electronApp.close()
+      }
+
+      const { electronApp: restartedApp, window: restartedWindow } = await launchApp({
+        windowMode: 'offscreen',
+        userDataDir,
+        cleanupUserDataDir: true,
+      })
+
+      try {
+        await expect(restartedWindow.locator('.terminal-node')).toHaveCount(1)
+        await expect(
+          restartedWindow.locator('.workspace-sidebar .workspace-agent-item'),
+        ).toHaveCount(1)
+        await expect(restartedWindow.locator('.terminal-node').first()).toContainText(
+          '[cove-test-agent] codex new',
+        )
+        await expect(
+          restartedWindow.locator(
+            '.workspace-sidebar .workspace-agent-item .workspace-agent-item__status--agent',
+          ),
+        ).toHaveText('Standby')
+      } finally {
+        await restartedApp.close()
+      }
+    } finally {
+      await rm(userDataDir, { recursive: true, force: true })
+    }
+  })
+
+  test('resumes a task-linked agent after app restart', async () => {
+    const userDataDir = await createTestUserDataDir()
+    const taskDirectory = path.join(testWorkspacePath, 'docs')
+
+    const readBinding = async (window: Page) => {
+      const parsed = (await readWorkspaceStateRaw(window)) as {
+        workspaces?: Array<{
+          nodes?: Array<{
+            id?: string
+            kind?: string
+            task?: { linkedAgentNodeId?: string | null } | null
+            agent?: {
+              resumeSessionId?: string | null
+              resumeSessionIdVerified?: boolean
+            } | null
+          }>
+        }>
+      } | null
+
+      const nodes = parsed?.workspaces?.[0]?.nodes ?? []
+      const task = nodes.find(node => node.kind === 'task')
+      const linkedAgentNodeId = task?.task?.linkedAgentNodeId ?? null
+      const agent = linkedAgentNodeId
+        ? nodes.find(node => node.kind === 'agent' && node.id === linkedAgentNodeId)
+        : null
+
+      return {
+        linkedAgentNodeId,
+        resumeSessionId: agent?.agent?.resumeSessionId ?? null,
+        resumeSessionIdVerified: agent?.agent?.resumeSessionIdVerified ?? false,
+      }
+    }
+
+    try {
+      const { electronApp, window } = await launchApp({
+        windowMode: 'offscreen',
+        userDataDir,
+        cleanupUserDataDir: false,
+        env: {
+          COVE_TEST_ENABLE_SESSION_STATE_WATCHER: '1',
+          COVE_TEST_AGENT_SESSION_SCENARIO: 'codex-standby-no-newline',
+        },
+      })
+
+      let initialBinding: Awaited<ReturnType<typeof readBinding>>
+
+      try {
+        await clearAndSeedWorkspace(
+          window,
+          [
+            {
+              id: 'task-one',
+              title: 'First task',
+              position: { x: 120, y: 140 },
+              width: 460,
+              height: 280,
+              kind: 'task',
+              task: {
+                requirement: 'Verify agent resume after restart',
+                status: 'todo',
+                linkedAgentNodeId: null,
+                lastRunAt: null,
+                autoGeneratedTitle: false,
+                createdAt: '2026-03-08T00:00:00.000Z',
+                updatedAt: '2026-03-08T00:00:00.000Z',
+              },
+            },
+          ],
+          {
+            settings: {
+              defaultProvider: 'codex',
+              customModelEnabledByProvider: {
+                'claude-code': false,
+                codex: true,
+              },
+              customModelByProvider: {
+                'claude-code': '',
+                codex: 'gpt-5.2-codex',
+              },
+              customModelOptionsByProvider: {
+                'claude-code': [],
+                codex: ['gpt-5.2-codex'],
+              },
+            },
+            spaces: [
+              {
+                id: 'space-one',
+                name: 'docs',
+                directoryPath: taskDirectory,
+                nodeIds: ['task-one'],
+                rect: null,
+              },
+            ],
+          },
+        )
+
+        await expect(window.locator('.task-node')).toHaveCount(1)
+        await window.locator('.task-node [data-testid="task-node-run-agent"]').click()
+        await expect(window.locator('.terminal-node')).toHaveCount(1)
+
+        await expect
+          .poll(async () => {
+            const binding = await readBinding(window)
+            return (
+              typeof binding.linkedAgentNodeId === 'string' &&
+              binding.linkedAgentNodeId.length > 0 &&
+              binding.resumeSessionIdVerified === true &&
+              typeof binding.resumeSessionId === 'string' &&
+              binding.resumeSessionId.length > 0
+            )
+          })
+          .toBe(true)
+
+        initialBinding = await readBinding(window)
+      } finally {
+        await electronApp.close()
+      }
+
+      const { electronApp: restartedApp, window: restartedWindow } = await launchApp({
+        windowMode: 'offscreen',
+        userDataDir,
+        cleanupUserDataDir: true,
+      })
+
+      try {
+        const terminalNode = restartedWindow.locator('.terminal-node').first()
+        await expect(terminalNode).toBeVisible()
+
+        const viewport = terminalNode.locator('.xterm-viewport').first()
+        await viewport
+          .evaluate(element => {
+            element.scrollTop = element.scrollHeight
+          })
+          .catch(() => undefined)
+
+        await expect(terminalNode).toContainText('[cove-test-agent] codex resume', {
+          timeout: 20_000,
+        })
+
+        await expect
+          .poll(async () => {
+            const binding = await readBinding(restartedWindow)
+            return (
+              binding.linkedAgentNodeId === initialBinding.linkedAgentNodeId &&
+              binding.resumeSessionId === initialBinding.resumeSessionId &&
+              binding.resumeSessionIdVerified === initialBinding.resumeSessionIdVerified
+            )
+          })
+          .toBe(true)
+      } finally {
+        await restartedApp.close()
+      }
+    } finally {
+      await rm(userDataDir, { recursive: true, force: true })
+    }
+  })
+
+  test('restores task-linked agent sessions without crossing resume bindings after restart', async () => {
+    const userDataDir = await createTestUserDataDir()
+    const dirOne = path.join(testWorkspacePath, 'docs')
+    const dirTwo = path.join(testWorkspacePath, 'scripts')
+
+    const readBindings = async (window: Page) => {
+      const parsed = (await readWorkspaceStateRaw(window)) as {
+        workspaces?: Array<{
+          nodes?: Array<{
+            id?: string
+            kind?: string
+            task?: { linkedAgentNodeId?: string | null } | null
+            agent?: {
+              resumeSessionId?: string | null
+              resumeSessionIdVerified?: boolean
+            } | null
+          }>
+        }>
+      } | null
+
+      const nodes = parsed?.workspaces?.[0]?.nodes ?? []
+      const tasks = nodes.filter(node => node.kind === 'task')
+      const agents = nodes.filter(node => node.kind === 'agent')
+      const agentById = new Map(agents.map(agent => [agent.id ?? '', agent]))
+
+      return tasks
+        .map(task => {
+          const linkedAgentNodeId = task.task?.linkedAgentNodeId ?? null
+          const agent = linkedAgentNodeId ? agentById.get(linkedAgentNodeId) : undefined
+          return {
+            taskId: task.id ?? '',
+            linkedAgentNodeId,
+            resumeSessionId: agent?.agent?.resumeSessionId ?? null,
+            resumeSessionIdVerified: agent?.agent?.resumeSessionIdVerified ?? false,
+          }
+        })
+        .filter(binding => binding.taskId.length > 0)
+    }
+
+    try {
+      const { electronApp, window } = await launchApp({
+        windowMode: 'offscreen',
+        userDataDir,
+        cleanupUserDataDir: false,
+        env: {
+          COVE_TEST_ENABLE_SESSION_STATE_WATCHER: '1',
+          COVE_TEST_AGENT_SESSION_SCENARIO: 'codex-standby-no-newline',
+        },
+      })
+
+      let initialBindings: ReturnType<typeof readBindings> extends Promise<infer T> ? T : never
+
+      try {
+        await clearAndSeedWorkspace(
+          window,
+          [
+            {
+              id: 'task-one',
+              title: 'First task',
+              position: { x: 120, y: 140 },
+              width: 460,
+              height: 280,
+              kind: 'task',
+              task: {
+                requirement: 'Check agent resume binding for task one',
+                status: 'todo',
+                linkedAgentNodeId: null,
+                lastRunAt: null,
+                autoGeneratedTitle: false,
+                createdAt: '2026-03-08T00:00:00.000Z',
+                updatedAt: '2026-03-08T00:00:00.000Z',
+              },
+            },
+            {
+              id: 'task-two',
+              title: 'Second task',
+              position: { x: 120, y: 460 },
+              width: 460,
+              height: 280,
+              kind: 'task',
+              task: {
+                requirement: 'Check agent resume binding for task two',
+                status: 'todo',
+                linkedAgentNodeId: null,
+                lastRunAt: null,
+                autoGeneratedTitle: false,
+                createdAt: '2026-03-08T00:00:00.000Z',
+                updatedAt: '2026-03-08T00:00:00.000Z',
+              },
+            },
+          ],
+          {
+            settings: {
+              defaultProvider: 'codex',
+              customModelEnabledByProvider: {
+                'claude-code': false,
+                codex: true,
+              },
+              customModelByProvider: {
+                'claude-code': '',
+                codex: 'gpt-5.2-codex',
+              },
+              customModelOptionsByProvider: {
+                'claude-code': [],
+                codex: ['gpt-5.2-codex'],
+              },
+            },
+            spaces: [
+              {
+                id: 'space-one',
+                name: 'docs',
+                directoryPath: dirOne,
+                nodeIds: ['task-one'],
+                rect: null,
+              },
+              {
+                id: 'space-two',
+                name: 'scripts',
+                directoryPath: dirTwo,
+                nodeIds: ['task-two'],
+                rect: null,
+              },
+            ],
+          },
+        )
+
+        const taskNodes = window.locator('.task-node')
+        await expect(taskNodes).toHaveCount(2)
+
+        const taskOne = taskNodes.filter({ hasText: 'First task' }).first()
+        await expect(taskOne).toBeVisible()
+        await taskOne.locator('[data-testid="task-node-run-agent"]').click()
+
+        await expect(window.locator('.terminal-node')).toHaveCount(1)
+
+        const taskTwo = taskNodes.filter({ hasText: 'Second task' }).first()
+        await expect(taskTwo).toBeVisible()
+        await taskTwo.locator('[data-testid="task-node-run-agent"]').click()
+
+        await expect(window.locator('.terminal-node')).toHaveCount(2)
+
+        await expect
+          .poll(async () => {
+            const bindings = await readBindings(window)
+            return bindings.every(
+              binding =>
+                typeof binding.linkedAgentNodeId === 'string' &&
+                binding.linkedAgentNodeId.length > 0 &&
+                binding.resumeSessionIdVerified === true &&
+                typeof binding.resumeSessionId === 'string' &&
+                binding.resumeSessionId.length > 0,
+            )
+          })
+          .toBe(true)
+
+        initialBindings = await readBindings(window)
+      } finally {
+        await electronApp.close()
+      }
+
+      const { electronApp: restartedApp, window: restartedWindow } = await launchApp({
+        windowMode: 'offscreen',
+        userDataDir,
+        cleanupUserDataDir: true,
+      })
+
+      try {
+        await expect(restartedWindow.locator('.terminal-node')).toHaveCount(2)
+        await expect(restartedWindow.locator('.task-node')).toHaveCount(2)
+
+        await expect
+          .poll(async () => {
+            const bindings = await readBindings(restartedWindow)
+            if (bindings.length !== initialBindings.length) {
+              return false
+            }
+
+            const initialByTaskId = new Map(
+              initialBindings.map(binding => [binding.taskId, binding]),
+            )
+
+            return bindings.every(binding => {
+              const initial = initialByTaskId.get(binding.taskId)
+              if (!initial) {
+                return false
+              }
+
+              return (
+                binding.linkedAgentNodeId === initial.linkedAgentNodeId &&
+                binding.resumeSessionId === initial.resumeSessionId &&
+                binding.resumeSessionIdVerified === initial.resumeSessionIdVerified
+              )
+            })
+          })
+          .toBe(true)
+      } finally {
+        await restartedApp.close()
+      }
+    } finally {
+      await rm(userDataDir, { recursive: true, force: true })
+    }
+  })
+})
