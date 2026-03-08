@@ -43,6 +43,8 @@ function WorkspaceCanvasInner({
     selectedSpaceIdsRef,
     dragSelectedSpaceIdsRef,
     selectionDraftRef,
+    selectionDraftUi,
+    setSelectionDraftUi,
     inputModalityStateRef,
     isShiftPressedRef,
     trackpadGestureLockRef,
@@ -312,6 +314,7 @@ function WorkspaceCanvasInner({
     isTrackpadCanvasMode,
     isShiftPressedRef,
     selectionDraftRef,
+    setSelectionDraftUi,
     reactFlow,
     setNodes,
     setSelectedNodeIds,
@@ -413,6 +416,7 @@ function WorkspaceCanvasInner({
       viewport={viewport}
       isTrackpadCanvasMode={isTrackpadCanvasMode}
       isShiftPressed={isShiftPressed}
+      selectionDraft={selectionDraftUi}
       spaceVisuals={spaceVisuals}
       spaceFramePreview={spaceFramePreview}
       selectedSpaceIds={selectedSpaceIds}

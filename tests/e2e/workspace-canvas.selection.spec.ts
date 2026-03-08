@@ -22,7 +22,9 @@ test.describe('Workspace Canvas - Selection', () => {
       await window.mouse.move(startX, startY)
       await window.mouse.down()
       await window.mouse.move(startX + 220, startY + 170, { steps: 8 })
+      await expect(window.locator('.workspace-selection-draft')).toBeVisible()
       await window.mouse.up()
+      await expect(window.locator('.workspace-selection-draft')).toHaveCount(0)
       await window.keyboard.up('Shift')
 
       await expect(

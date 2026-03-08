@@ -12,6 +12,11 @@ import type {
   TrackpadGestureLockState,
 } from '../types'
 
+type SelectionDraftUiState = Pick<
+  SelectionDraftState,
+  'startX' | 'startY' | 'currentX' | 'currentY' | 'phase'
+>
+
 export function useWorkspaceCanvasState({
   nodes,
   spaces,
@@ -43,6 +48,8 @@ export function useWorkspaceCanvasState({
   selectedSpaceIdsRef: React.MutableRefObject<string[]>
   dragSelectedSpaceIdsRef: React.MutableRefObject<string[] | null>
   selectionDraftRef: React.MutableRefObject<SelectionDraftState | null>
+  selectionDraftUi: SelectionDraftUiState | null
+  setSelectionDraftUi: React.Dispatch<React.SetStateAction<SelectionDraftUiState | null>>
   inputModalityStateRef: React.MutableRefObject<ReturnType<typeof createCanvasInputModalityState>>
   isShiftPressedRef: React.MutableRefObject<boolean>
   trackpadGestureLockRef: React.MutableRefObject<TrackpadGestureLockState | null>
@@ -54,6 +61,7 @@ export function useWorkspaceCanvasState({
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
   const [selectedSpaceIds, setSelectedSpaceIds] = useState<string[]>([])
   const [, setEmptySelectionPrompt] = useState<EmptySelectionPromptState | null>(null)
+  const [selectionDraftUi, setSelectionDraftUi] = useState<SelectionDraftUiState | null>(null)
   const [detectedCanvasInputMode, setDetectedCanvasInputMode] =
     useState<DetectedCanvasInputMode>('mouse')
   const [isShiftPressed, setIsShiftPressed] = useState(false)
@@ -70,23 +78,7 @@ export function useWorkspaceCanvasState({
   const trackpadGestureLockRef = useRef<TrackpadGestureLockState | null>(null)
   const viewportRef = useRef<Viewport>(viewport)
 
-  const flowNodes = useMemo(() => {
-    return nodes.map(node => {
-      if (node.data.kind === 'note') {
-        return node
-      }
-
-      const dragHandle = '[data-node-drag-handle="true"]'
-      if (node.dragHandle === dragHandle) {
-        return node
-      }
-
-      return {
-        ...node,
-        dragHandle,
-      }
-    })
-  }, [nodes])
+  const flowNodes = useMemo(() => nodes, [nodes])
 
   useLayoutEffect(() => {
     selectedNodeIdsRef.current = selectedNodeIds
@@ -117,6 +109,8 @@ export function useWorkspaceCanvasState({
     selectedSpaceIdsRef,
     dragSelectedSpaceIdsRef,
     selectionDraftRef,
+    selectionDraftUi,
+    setSelectionDraftUi,
     inputModalityStateRef,
     isShiftPressedRef,
     trackpadGestureLockRef,

@@ -18,10 +18,16 @@ type SetNodes = (
   options?: { syncLayout?: boolean },
 ) => void
 
+type SelectionDraftUiState = Pick<
+  SelectionDraftState,
+  'startX' | 'startY' | 'currentX' | 'currentY' | 'phase'
+>
+
 interface UseWorkspaceCanvasInteractionsParams {
   isTrackpadCanvasMode: boolean
   isShiftPressedRef: React.MutableRefObject<boolean>
   selectionDraftRef: React.MutableRefObject<SelectionDraftState | null>
+  setSelectionDraftUi: React.Dispatch<React.SetStateAction<SelectionDraftUiState | null>>
   reactFlow: ReactFlowInstance<Node<TerminalNodeData>, Edge>
   setNodes: SetNodes
   setSelectedNodeIds: React.Dispatch<React.SetStateAction<string[]>>
@@ -44,6 +50,7 @@ export function useWorkspaceCanvasInteractions({
   isTrackpadCanvasMode,
   isShiftPressedRef,
   selectionDraftRef,
+  setSelectionDraftUi,
   reactFlow,
   setNodes,
   setSelectedNodeIds,
@@ -187,6 +194,7 @@ export function useWorkspaceCanvasInteractions({
     isTrackpadCanvasMode,
     isShiftPressedRef,
     selectionDraftRef,
+    setSelectionDraftUi,
     reactFlow,
     spacesRef,
     selectedNodeIdsRef,

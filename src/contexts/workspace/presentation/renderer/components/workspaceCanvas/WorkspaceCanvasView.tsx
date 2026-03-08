@@ -19,6 +19,7 @@ import type {
   ContextMenuState,
   SpaceActionMenuState,
   SpaceVisual,
+  SelectionDraftState,
   SpaceWorktreeDialogState,
   WorkspaceCanvasProps,
   TaskAssignerState,
@@ -28,6 +29,7 @@ import type {
 } from './types'
 import { WorkspaceContextMenu } from './view/WorkspaceContextMenu'
 import { WorkspaceMinimapDock } from './view/WorkspaceMinimapDock'
+import { WorkspaceSelectionDraftOverlay } from './view/WorkspaceSelectionDraftOverlay'
 import { WorkspaceSpaceActionMenu } from './view/WorkspaceSpaceActionMenu'
 import { WorkspaceSpaceRegionsOverlay } from './view/WorkspaceSpaceRegionsOverlay'
 import { WorkspaceSpaceSwitcher } from './view/WorkspaceSpaceSwitcher'
@@ -72,6 +74,7 @@ interface WorkspaceCanvasViewProps {
   viewport: Viewport
   isTrackpadCanvasMode: boolean
   isShiftPressed: boolean
+  selectionDraft: SelectionDraftUiState | null
 
   spaceVisuals: SpaceVisual[]
   spaceFramePreview: { spaceId: string; rect: WorkspaceSpaceRect } | null
@@ -165,6 +168,11 @@ interface WorkspaceCanvasViewProps {
   closeNodesById: (nodeIds: string[]) => Promise<void>
 }
 
+type SelectionDraftUiState = Pick<
+  SelectionDraftState,
+  'startX' | 'startY' | 'currentX' | 'currentY' | 'phase'
+>
+
 export function WorkspaceCanvasView({
   canvasRef,
   resolvedCanvasInputMode,
@@ -191,6 +199,7 @@ export function WorkspaceCanvasView({
   viewport,
   isTrackpadCanvasMode,
   isShiftPressed,
+  selectionDraft,
   spaceVisuals,
   spaceFramePreview,
   selectedSpaceIds,
@@ -360,6 +369,8 @@ export function WorkspaceCanvasView({
 
         <Controls className="workspace-canvas__controls" showInteractive={false} />
       </ReactFlow>
+
+      <WorkspaceSelectionDraftOverlay canvasRef={canvasRef} draft={selectionDraft} />
 
       <WorkspaceSpaceSwitcher
         spaces={spaces}
