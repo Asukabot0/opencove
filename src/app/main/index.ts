@@ -10,6 +10,15 @@ let ipcDisposable: ReturnType<typeof registerIpcHandlers> | null = null
 const APP_USER_DATA_DIRECTORY_NAME = 'opencove'
 const OPENCOVE_APP_USER_MODEL_ID = 'dev.deadwave.opencove'
 
+if (process.env['NODE_ENV'] === 'test') {
+  // GitHub Actions macOS runners often treat the Electron window as occluded/backgrounded even in
+  // "normal" mode, which can pause rAF/timers and break pointer-driven E2E interactions.
+  // These Chromium switches keep the renderer responsive in such environments.
+  app.commandLine.appendSwitch('disable-renderer-backgrounding')
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+  app.commandLine.appendSwitch('disable-background-timer-throttling')
+}
+
 if (process.platform === 'linux' && process.env['NODE_ENV'] === 'test') {
   const disableSandboxForCi =
     (process.env['CI'] === '1' || process.env['CI']?.toLowerCase() === 'true') &&
