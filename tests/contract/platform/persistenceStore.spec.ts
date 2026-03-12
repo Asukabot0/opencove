@@ -151,4 +151,45 @@ describe('PersistenceStore', () => {
     },
     PERSISTENCE_STORE_TEST_TIMEOUT_MS,
   )
+
+  it(
+    'measures workspace state payload size in UTF-8 bytes',
+    async () => {
+      tempDir = await mkdtemp(join(tmpdir(), 'cove-persist-'))
+
+      const { createPersistenceStore } =
+        await import('../../../src/platform/persistence/sqlite/PersistenceStore')
+
+      const raw = JSON.stringify({
+        formatVersion: 1,
+        activeWorkspaceId: null,
+        workspaces: [],
+        settings: { label: '中😀' },
+      })
+      const rawBytes = Buffer.byteLength(raw, 'utf8')
+      expect(rawBytes).toBeGreaterThan(raw.length)
+
+      const oversizedStore = await createPersistenceStore({
+        dbPath: join(tempDir, 'oversized.db'),
+        maxRawBytes: raw.length,
+      })
+      const oversizedResult = await oversizedStore.writeWorkspaceStateRaw(raw)
+      expect(oversizedResult).toEqual({
+        ok: false,
+        reason: 'payload_too_large',
+        message: `Workspace state payload too large to persist (${rawBytes} bytes).`,
+      })
+      oversizedStore.dispose()
+
+      const store = await createPersistenceStore({
+        dbPath: join(tempDir, 'opencove.db'),
+        maxRawBytes: rawBytes,
+      })
+
+      const result = await store.writeWorkspaceStateRaw(raw)
+      expect(result).toEqual({ ok: true, level: 'full', bytes: rawBytes })
+      store.dispose()
+    },
+    PERSISTENCE_STORE_TEST_TIMEOUT_MS,
+  )
 })

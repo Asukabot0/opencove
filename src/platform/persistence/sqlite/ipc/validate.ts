@@ -4,6 +4,7 @@ import type {
   WriteNodeScrollbackInput,
   WriteWorkspaceStateRawInput,
 } from '../../../../shared/contracts/dto'
+import { utf8ByteLength } from '../utils'
 
 const DEFAULT_MAX_RAW_BYTES = 50 * 1024 * 1024
 
@@ -35,8 +36,9 @@ export function normalizeWriteWorkspaceStateRawPayload(
   }
 
   const maxRawBytes = options.maxRawBytes ?? DEFAULT_MAX_RAW_BYTES
-  if (raw.length > maxRawBytes) {
-    throw new PayloadTooLargeError(raw.length, maxRawBytes)
+  const rawBytes = utf8ByteLength(raw)
+  if (rawBytes > maxRawBytes) {
+    throw new PayloadTooLargeError(rawBytes, maxRawBytes)
   }
 
   let parsed: unknown

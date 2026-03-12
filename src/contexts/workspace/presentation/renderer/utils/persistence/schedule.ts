@@ -37,21 +37,20 @@ export function flushScheduledPersistedStateWrite(): void {
     scheduledPersistedStateTimer = null
   }
 
-  const producer = scheduledPersistedStateProducer
-  scheduledPersistedStateProducer = null
-
-  const onResult = scheduledPersistedStateOnResult
-  scheduledPersistedStateOnResult = null
-
   if (persistFlushInFlight) {
     persistFlushRequested = true
     return
   }
 
+  const producer = scheduledPersistedStateProducer
+  const onResult = scheduledPersistedStateOnResult
+
   if (!producer) {
     return
   }
 
+  scheduledPersistedStateProducer = null
+  scheduledPersistedStateOnResult = null
   persistFlushInFlight = true
 
   void writePersistedState(producer())

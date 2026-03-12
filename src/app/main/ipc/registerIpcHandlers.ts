@@ -25,7 +25,14 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     }
 
     const dbPath = resolve(app.getPath('userData'), 'opencove.db')
-    persistenceStorePromise = createPersistenceStore({ dbPath })
+    const nextStorePromise = createPersistenceStore({ dbPath }).catch(error => {
+      if (persistenceStorePromise === nextStorePromise) {
+        persistenceStorePromise = null
+      }
+
+      throw error
+    })
+    persistenceStorePromise = nextStorePromise
     return await persistenceStorePromise
   }
 

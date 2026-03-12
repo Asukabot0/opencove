@@ -10,7 +10,7 @@ import { migrate } from './migrate'
 import { normalizePersistedAppState, normalizeScrollback } from './normalize'
 import { readAppStateFromDb, readWorkspaceStateRawFromDb } from './read'
 import { nodeScrollback } from './schema'
-import { safeJsonParse, toErrorMessage } from './utils'
+import { safeJsonParse, safeJsonStringify, toErrorMessage, utf8ByteLength } from './utils'
 import { writeNormalizedAppState, writeNormalizedScrollbacks } from './write'
 
 export type PersistenceRecoveryReason = 'corrupt_db' | 'migration_failed'
@@ -100,11 +100,12 @@ export async function createPersistenceStore(options: {
   }
 
   const writeWorkspaceStateRaw = async (raw: string): Promise<PersistWriteResult> => {
-    if (raw.length > maxRawBytes) {
+    const rawBytes = utf8ByteLength(raw)
+    if (rawBytes > maxRawBytes) {
       return {
         ok: false,
         reason: 'payload_too_large',
-        message: `Workspace state payload too large to persist (${raw.length} bytes).`,
+        message: `Workspace state payload too large to persist (${rawBytes} bytes).`,
       }
     }
 
@@ -124,7 +125,7 @@ export async function createPersistenceStore(options: {
         writeNormalizedScrollbacks(sqlite, normalized)
       })()
 
-      return { ok: true, level: 'full', bytes: raw.length }
+      return { ok: true, level: 'full', bytes: rawBytes }
     } catch (error) {
       return { ok: false, reason: 'io', message: toErrorMessage(error) }
     }
@@ -138,7 +139,7 @@ export async function createPersistenceStore(options: {
 
     try {
       writeNormalizedAppState(sqlite, normalized)
-      const bytes = JSON.stringify(normalized).length
+      const bytes = utf8ByteLength(safeJsonStringify(normalized))
       return { ok: true, level: 'full', bytes }
     } catch (error) {
       return { ok: false, reason: 'io', message: toErrorMessage(error) }
@@ -186,7 +187,7 @@ export async function createPersistenceStore(options: {
           set: { scrollback: normalizedScrollback, updatedAt: nowIso },
         })
         .run()
-      return { ok: true, level: 'full', bytes: normalizedScrollback.length }
+      return { ok: true, level: 'full', bytes: utf8ByteLength(normalizedScrollback) }
     } catch (error) {
       return { ok: false, reason: 'io', message: toErrorMessage(error) }
     }

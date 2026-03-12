@@ -207,6 +207,61 @@ describe('persistence IPC handlers', () => {
     expect(store.writeWorkspaceStateRaw).not.toHaveBeenCalled()
   })
 
+  it('enforces the raw payload max bytes using UTF-8 bytes', async () => {
+    vi.resetModules()
+
+    const { handlers, ipcMain } = createIpcHarness()
+    vi.doMock('electron', () => ({ ipcMain }))
+
+    const store = {
+      readWorkspaceStateRaw: vi.fn(async () => null),
+      writeWorkspaceStateRaw: vi.fn(
+        async (_raw: string): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(
+        async (_state: unknown): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      consumeRecovery: vi.fn(() => null),
+      dispose: vi.fn(),
+    }
+
+    const { registerPersistenceIpcHandlers } =
+      await import('../../../src/platform/persistence/sqlite/ipc/register')
+
+    const raw = JSON.stringify({ label: '中😀' })
+    expect(Buffer.byteLength(raw, 'utf8')).toBeGreaterThan(raw.length)
+
+    registerPersistenceIpcHandlers(async () => store, { maxRawBytes: raw.length })
+
+    const writeHandler = handlers.get(IPC_CHANNELS.persistenceWriteWorkspaceStateRaw)
+    expect(writeHandler).toBeTypeOf('function')
+
+    await expect(writeHandler?.(null, { raw })).resolves.toEqual({
+      ok: false,
+      reason: 'payload_too_large',
+      message: expect.stringContaining(`${Buffer.byteLength(raw, 'utf8')} bytes`),
+    })
+
+    expect(store.writeWorkspaceStateRaw).not.toHaveBeenCalled()
+  })
+
   it('removes IPC handlers on dispose', async () => {
     vi.resetModules()
 
