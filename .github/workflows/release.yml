@@ -16,6 +16,9 @@ jobs:
   build:
     name: Build (${{ matrix.label }})
     runs-on: ${{ matrix.runner }}
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +51,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ELECTRON_CACHE }}
+            ${{ env.ELECTRON_BUILDER_CACHE }}
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -60,7 +71,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-assets-${{ matrix.artifact_name }}
-          path: dist/*
+          path: |
+            dist/*.AppImage
+            dist/*.blockmap
+            dist/*.dmg
+            dist/*.exe
+            dist/*.zip
+            dist/latest*.yml
           if-no-files-found: error
           retention-days: 7
 
