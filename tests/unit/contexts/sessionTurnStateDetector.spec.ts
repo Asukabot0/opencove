@@ -92,6 +92,32 @@ describe('detectTurnStateFromSessionLine', () => {
     expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
   })
 
+  it('treats codex event-stream commentary agent messages as working', () => {
+    const line = JSON.stringify({
+      type: 'event_msg',
+      payload: {
+        type: 'agent_message',
+        phase: 'commentary',
+        message: 'I am checking the repo.',
+      },
+    })
+
+    expect(detectTurnStateFromSessionLine('codex', line)).toBe('working')
+  })
+
+  it('treats codex event-stream final-answer agent messages as standby', () => {
+    const line = JSON.stringify({
+      type: 'event_msg',
+      payload: {
+        type: 'agent_message',
+        phase: 'final_answer',
+        message: 'All set.',
+      },
+    })
+
+    expect(detectTurnStateFromSessionLine('codex', line)).toBe('standby')
+  })
+
   it('treats codex assistant messages without phase as standby for compatibility', () => {
     const line = JSON.stringify({
       type: 'response_item',

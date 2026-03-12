@@ -218,4 +218,58 @@ describe('SessionTurnStateWatcher', () => {
       expect(states).toEqual(['working'])
     })
   })
+
+  it('tracks codex event-stream agent_message phases from commentary to final answer', async () => {
+    const tempDir = await fs.mkdtemp(join(tmpdir(), 'cove-session-watcher-'))
+    const filePath = join(tempDir, 'session.jsonl')
+
+    await fs.writeFile(filePath, '', 'utf8')
+
+    const states: string[] = []
+    const watcher = new SessionTurnStateWatcher({
+      provider: 'codex',
+      sessionId: 'session-4',
+      filePath,
+      onState: (_sessionId, state) => {
+        states.push(state)
+      },
+    })
+
+    disposers.push(() => watcher.dispose())
+    watcher.start()
+
+    await fs.appendFile(
+      filePath,
+      `${JSON.stringify({
+        type: 'event_msg',
+        payload: {
+          type: 'agent_message',
+          phase: 'commentary',
+          message: 'I am checking the repo before making changes.',
+        },
+      })}\n`,
+      'utf8',
+    )
+
+    await waitForCondition(() => {
+      expect(states).toEqual(['working'])
+    })
+
+    await fs.appendFile(
+      filePath,
+      JSON.stringify({
+        type: 'event_msg',
+        payload: {
+          type: 'agent_message',
+          phase: 'final_answer',
+          message: 'Done.',
+        },
+      }),
+      'utf8',
+    )
+
+    await waitForCondition(() => {
+      expect(states).toEqual(['working', 'standby'])
+    })
+  })
 })

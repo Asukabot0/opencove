@@ -49,6 +49,21 @@ function hasContentBlockType(message: Record<string, unknown>, blockType: string
   })
 }
 
+function detectCodexAssistantMessageState(
+  payload: Record<string, unknown>,
+  options: { fallbackToStandbyWithoutPhase: boolean },
+): TerminalSessionState | null {
+  if (payload.phase === 'commentary') {
+    return 'working'
+  }
+
+  if (payload.phase === 'final_answer') {
+    return 'standby'
+  }
+
+  return options.fallbackToStandbyWithoutPhase ? 'standby' : null
+}
+
 function detectClaudeTurnState(parsed: unknown): TerminalSessionState | null {
   if (!isRecord(parsed) || typeof parsed.type !== 'string') {
     return null
@@ -108,11 +123,9 @@ function detectCodexTurnState(parsed: unknown): TerminalSessionState | null {
         return null
       }
 
-      if (payload.phase === 'commentary') {
-        return 'working'
-      }
-
-      return 'standby'
+      return detectCodexAssistantMessageState(payload, {
+        fallbackToStandbyWithoutPhase: true,
+      })
     }
 
     if (
@@ -132,6 +145,12 @@ function detectCodexTurnState(parsed: unknown): TerminalSessionState | null {
 
     if (payload.type === 'agent_reasoning') {
       return 'working'
+    }
+
+    if (payload.type === 'agent_message') {
+      return detectCodexAssistantMessageState(payload, {
+        fallbackToStandbyWithoutPhase: false,
+      })
     }
 
     if (payload.type === 'turn_aborted') {
