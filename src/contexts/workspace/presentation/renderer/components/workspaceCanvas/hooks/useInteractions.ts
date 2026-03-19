@@ -15,6 +15,7 @@ import {
   assignNodeToSpaceAndExpand,
   findContainingSpaceByAnchor,
 } from './useInteractions.spaceAssignment'
+import { createNoteNodeAtAnchor } from './useInteractions.noteCreation'
 import { handleSelectionRectNodeToggle } from './useInteractions.selectionRectToggle'
 import {
   isCanvasDoubleClickCreateTarget,
@@ -98,6 +99,7 @@ export function useWorkspaceCanvasInteractions({
   handleCanvasPointerUpCapture: React.PointerEventHandler<HTMLDivElement>
   handlePaneClick: (_event: React.MouseEvent | MouseEvent) => void
   createTerminalNode: () => Promise<void>
+  createNoteNodeFromContextMenu: () => void
 } {
   const reactFlowStore = useStoreApi()
   const selectNode = useWorkspaceCanvasSelectNode({
@@ -247,11 +249,7 @@ export function useWorkspaceCanvasInteractions({
     setEmptySelectionPrompt,
   })
 
-  const paneDragRef = useRef<{
-    startX: number
-    startY: number
-    didMove: boolean
-  } | null>(null)
+  const paneDragRef = useRef<{ startX: number; startY: number; didMove: boolean } | null>(null)
 
   const ignoreNextPaneClickRef = useRef(false)
 
@@ -369,19 +367,10 @@ export function useWorkspaceCanvasInteractions({
         DEFAULT_NOTE_WINDOW_SIZE,
       )
 
-      const created = createNoteNode(anchor)
-      if (!created) {
-        return
-      }
-
-      const targetSpace = findContainingSpaceByAnchor(spacesRef.current, cursorAnchor)
-      if (!targetSpace) {
-        return
-      }
-
-      assignNodeToSpaceAndExpand({
-        createdNodeId: created.id,
-        targetSpaceId: targetSpace.id,
+      createNoteNodeAtAnchor({
+        anchor,
+        spaceAnchor: cursorAnchor,
+        createNoteNode,
         spacesRef,
         nodesRef,
         setNodes,
@@ -481,6 +470,33 @@ export function useWorkspaceCanvasInteractions({
     workspacePath,
   ])
 
+  const createNoteNodeFromContextMenu = useCallback(() => {
+    if (!contextMenu || contextMenu.kind !== 'pane') {
+      return
+    }
+
+    const cursorAnchor = {
+      x: contextMenu.flowX,
+      y: contextMenu.flowY,
+    }
+    const anchor = resolveNodePlacementAnchorFromViewportCenter(
+      cursorAnchor,
+      DEFAULT_NOTE_WINDOW_SIZE,
+    )
+
+    setContextMenu(null)
+
+    createNoteNodeAtAnchor({
+      anchor,
+      spaceAnchor: cursorAnchor,
+      createNoteNode,
+      spacesRef,
+      nodesRef,
+      setNodes,
+      onSpacesChange,
+    })
+  }, [contextMenu, createNoteNode, nodesRef, onSpacesChange, setContextMenu, setNodes, spacesRef])
+
   return {
     clearNodeSelection,
     handleCanvasDoubleClickCapture,
@@ -494,5 +510,6 @@ export function useWorkspaceCanvasInteractions({
     handleCanvasPointerUpCapture: handleCanvasPointerUpCaptureWithDragGuard,
     handlePaneClick,
     createTerminalNode,
+    createNoteNodeFromContextMenu,
   }
 }

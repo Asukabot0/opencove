@@ -299,6 +299,7 @@ function WorkspaceCanvasInner({
     handleCanvasDoubleClickCapture,
     handlePaneClick,
     createTerminalNode,
+    createNoteNodeFromContextMenu,
   } = workspaceCanvasHooks.useWorkspaceCanvasInteractions({
     isTrackpadCanvasMode,
     normalizeZoomOnNodeClick: agentSettings.normalizeZoomOnTerminalClick,
@@ -449,6 +450,7 @@ function WorkspaceCanvasInner({
       contextMenu={contextMenu}
       closeContextMenu={spaceUi.closeContextMenu}
       createTerminalNode={createTerminalNode}
+      createNoteNodeFromContextMenu={createNoteNodeFromContextMenu}
       openTaskCreator={openTaskCreator}
       openAgentLauncher={openAgentLauncher}
       createSpaceFromSelectedNodes={createSpaceFromSelectedNodes}
