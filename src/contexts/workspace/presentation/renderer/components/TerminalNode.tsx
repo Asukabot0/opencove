@@ -220,6 +220,7 @@ export function TerminalNode({
 
     let isHydrating = true
     const bufferedDataChunks: string[] = []
+    let hasBufferedExit = false
     let bufferedExitCode: number | null = null
     const ptyEventHub = getPtyEventHub()
 
@@ -242,11 +243,15 @@ export function TerminalNode({
 
     const unsubscribeExit = ptyEventHub.onSessionExit(sessionId, event => {
       if (isHydrating) {
+        hasBufferedExit = true
         bufferedExitCode = event.exitCode
         return
       }
 
-      const exitMessage = `\r\n[process exited with code ${event.exitCode}]\r\n`
+      const exitMessage =
+        event.exitCode === null
+          ? '\r\n[process exited]\r\n'
+          : `\r\n[process exited with code ${event.exitCode}]\r\n`
       outputScheduler.handleChunk(exitMessage, { immediateScrollbackPublish: true })
     })
 
@@ -274,8 +279,12 @@ export function TerminalNode({
         }
       }
 
-      if (bufferedExitCode !== null) {
-        const exitMessage = `\r\n[process exited with code ${bufferedExitCode}]\r\n`
+      if (hasBufferedExit) {
+        const exitMessage =
+          bufferedExitCode === null
+            ? '\r\n[process exited]\r\n'
+            : `\r\n[process exited with code ${bufferedExitCode}]\r\n`
+        hasBufferedExit = false
         bufferedExitCode = null
         terminal.write(exitMessage)
         scrollbackBuffer.append(exitMessage)

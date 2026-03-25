@@ -5,7 +5,7 @@ import type { TerminalNodeData } from '../../../types'
 
 export function applyAgentExitToNodes(
   prevNodes: Node<TerminalNodeData>[],
-  event: { sessionId: string; exitCode: number },
+  event: { sessionId: string; exitCode: number | null },
 ): { nextNodes: Node<TerminalNodeData>[]; didChange: boolean } {
   let didChange = false
 

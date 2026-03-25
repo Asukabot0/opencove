@@ -23,9 +23,12 @@ export interface SpawnTerminalInput {
   rows: number
 }
 
+export type SessionKind = 'local' | 'ssh'
+
 export interface SpawnTerminalResult extends PseudoTerminalSession {
   profileId?: string | null
   runtimeKind?: TerminalRuntimeKind
+  sessionKind?: SessionKind
 }
 
 export type TerminalWriteEncoding = 'utf8' | 'binary'
@@ -69,7 +72,7 @@ export interface TerminalDataEvent {
 
 export interface TerminalExitEvent {
   sessionId: string
-  exitCode: number
+  exitCode: number | null
 }
 
 export type TerminalSessionState = 'working' | 'standby'

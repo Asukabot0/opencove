@@ -1,25 +1,19 @@
 import { webContents } from 'electron'
-import type { IPty } from 'node-pty'
 import { IPC_CHANNELS } from '../../../../shared/contracts/ipc'
 import type {
   AgentLaunchMode,
   AgentProviderId,
-  ListTerminalProfilesResult,
-  SpawnTerminalInput,
-  SpawnTerminalResult,
   TerminalDataEvent,
-  TerminalExitEvent,
   TerminalWriteEncoding,
 } from '../../../../shared/contracts/dto'
-import { PtyManager, type SpawnPtyOptions } from '../../../../platform/process/pty/PtyManager'
+import type { SpawnPtyOptions } from '../../../../platform/process/pty/PtyManager'
+import { LocalPtyAdapter } from '../../../../platform/process/pty/LocalPtyAdapter'
 import { TerminalProfileResolver } from '../../../../platform/terminal/TerminalProfileResolver'
 import type { GeminiSessionDiscoveryCursor } from '../../../agent/infrastructure/cli/AgentSessionLocatorProviders'
 import { createSessionStateWatcherController } from './sessionStateWatcher'
-
-const PTY_DATA_FLUSH_DELAY_MS = 32
-const PTY_DATA_HIGH_VOLUME_FLUSH_DELAY_MS = 64
-const PTY_DATA_HIGH_VOLUME_BATCH_CHARS = 32_000
-const PTY_DATA_MAX_BATCH_CHARS = 256_000
+import { TerminalSessionManager } from '../../application/TerminalSessionManager'
+import type { TerminalSessionAdapter } from '../../domain/TerminalSessionAdapter'
+import type { SessionKind } from '../../domain/types'
 
 export interface StartSessionStateWatcherInput {
   sessionId: string
@@ -33,8 +27,12 @@ export interface StartSessionStateWatcherInput {
 }
 
 export interface PtyRuntime {
-  listProfiles?: () => Promise<ListTerminalProfilesResult>
-  spawnTerminalSession?: (input: SpawnTerminalInput) => Promise<SpawnTerminalResult>
+  listProfiles?: () => Promise<
+    import('../../../../shared/contracts/dto').ListTerminalProfilesResult
+  >
+  spawnTerminalSession?: (
+    input: import('../../../../shared/contracts/dto').SpawnTerminalInput,
+  ) => Promise<import('../../../../shared/contracts/dto').SpawnTerminalResult>
   spawnSession: (options: SpawnPtyOptions) => { sessionId: string }
   write: (sessionId: string, data: string, encoding?: TerminalWriteEncoding) => void
   resize: (sessionId: string, cols: number, rows: number) => void
@@ -55,16 +53,8 @@ function reportStateWatcherIssue(message: string): void {
 }
 
 export function createPtyRuntime(): PtyRuntime {
-  const ptyManager = new PtyManager()
+  const localAdapter: TerminalSessionAdapter = new LocalPtyAdapter()
   const profileResolver = new TerminalProfileResolver()
-  const terminalProbeBufferBySession = new Map<string, string>()
-  const pendingPtyDataChunksBySession = new Map<string, string[]>()
-  const pendingPtyDataCharsBySession = new Map<string, number>()
-  const pendingPtyDataFlushTimerBySession = new Map<string, NodeJS.Timeout>()
-  const pendingPtyDataFlushDelayBySession = new Map<string, number>()
-  const ptyDataSubscribersBySessionId = new Map<string, Set<number>>()
-  const ptyDataSessionsByWebContentsId = new Map<number, Set<string>>()
-  const ptyDataSubscribedWebContentsIds = new Set<number>()
 
   const sendToAllWindows = <Payload>(channel: string, payload: Payload): void => {
     for (const content of webContents.getAllWebContents()) {
@@ -85,258 +75,45 @@ export function createPtyRuntime(): PtyRuntime {
     reportIssue: reportStateWatcherIssue,
   })
 
-  const cleanupPtyDataSubscriptions = (contentsId: number): void => {
-    const sessions = ptyDataSessionsByWebContentsId.get(contentsId)
-    if (!sessions) {
+  const sendPtyDataToSubscriber = (contentsId: number, eventPayload: TerminalDataEvent): void => {
+    const content = webContents.fromId(contentsId)
+    if (!content || content.isDestroyed() || content.getType() !== 'window') {
       return
     }
 
-    ptyDataSessionsByWebContentsId.delete(contentsId)
-
-    for (const sessionId of sessions) {
-      const subscribers = ptyDataSubscribersBySessionId.get(sessionId)
-      if (!subscribers) {
-        continue
-      }
-
-      subscribers.delete(contentsId)
-      if (subscribers.size === 0) {
-        ptyDataSubscribersBySessionId.delete(sessionId)
-      }
-
-      syncSessionProbeBuffer(sessionId)
+    try {
+      content.send(IPC_CHANNELS.ptyData, eventPayload)
+    } catch {
+      // Ignore delivery failures (destroyed webContents, navigation in progress, etc.)
     }
   }
 
-  const cleanupSessionPtyDataSubscriptions = (sessionId: string): void => {
-    const subscribers = ptyDataSubscribersBySessionId.get(sessionId)
-    if (!subscribers) {
-      return
-    }
-
-    ptyDataSubscribersBySessionId.delete(sessionId)
-
-    for (const contentsId of subscribers) {
-      const sessions = ptyDataSessionsByWebContentsId.get(contentsId)
-      sessions?.delete(sessionId)
-      if (sessions && sessions.size === 0) {
-        ptyDataSessionsByWebContentsId.delete(contentsId)
-      }
-    }
-  }
-
-  const trackWebContentsSubscriptionLifecycle = (contentsId: number): void => {
-    if (ptyDataSubscribedWebContentsIds.has(contentsId)) {
-      return
-    }
-
+  const trackWebContentsDestroyed = (contentsId: number, onDestroyed: () => void): boolean => {
     const content = webContents.fromId(contentsId)
     if (!content) {
-      return
+      return false
     }
 
-    ptyDataSubscribedWebContentsIds.add(contentsId)
-    content.once('destroyed', () => {
-      ptyDataSubscribedWebContentsIds.delete(contentsId)
-      cleanupPtyDataSubscriptions(contentsId)
-    })
+    content.once('destroyed', onDestroyed)
+    return true
   }
 
-  const hasPtyDataSubscribers = (sessionId: string): boolean => {
-    const subscribers = ptyDataSubscribersBySessionId.get(sessionId)
-    return Boolean(subscribers && subscribers.size > 0)
-  }
+  const adapterRegistry = new Map<SessionKind, TerminalSessionAdapter>([['local', localAdapter]])
 
-  const syncSessionProbeBuffer = (sessionId: string): void => {
-    if (hasPtyDataSubscribers(sessionId)) {
-      terminalProbeBufferBySession.delete(sessionId)
-      return
-    }
-
-    terminalProbeBufferBySession.set(sessionId, '')
-  }
-
-  const sendPtyDataToSubscribers = (eventPayload: TerminalDataEvent): void => {
-    const subscribers = ptyDataSubscribersBySessionId.get(eventPayload.sessionId)
-    if (!subscribers || subscribers.size === 0) {
-      return
-    }
-
-    for (const contentsId of subscribers) {
-      const content = webContents.fromId(contentsId)
-      if (!content || content.isDestroyed() || content.getType() !== 'window') {
-        continue
-      }
-
-      try {
-        content.send(IPC_CHANNELS.ptyData, eventPayload)
-      } catch {
-        // Ignore delivery failures (destroyed webContents, navigation in progress, etc.)
-      }
-    }
-  }
-
-  const resolvePtyDataFlushDelay = (pendingChars: number): number => {
-    return pendingChars >= PTY_DATA_HIGH_VOLUME_BATCH_CHARS
-      ? PTY_DATA_HIGH_VOLUME_FLUSH_DELAY_MS
-      : PTY_DATA_FLUSH_DELAY_MS
-  }
-
-  const flushPtyDataBroadcast = (sessionId: string): void => {
-    const timer = pendingPtyDataFlushTimerBySession.get(sessionId)
-    if (timer) {
-      clearTimeout(timer)
-      pendingPtyDataFlushTimerBySession.delete(sessionId)
-    }
-
-    pendingPtyDataFlushDelayBySession.delete(sessionId)
-
-    const chunks = pendingPtyDataChunksBySession.get(sessionId)
-    if (!chunks || chunks.length === 0) {
-      pendingPtyDataChunksBySession.delete(sessionId)
-      pendingPtyDataCharsBySession.delete(sessionId)
-      return
-    }
-
-    pendingPtyDataChunksBySession.delete(sessionId)
-    pendingPtyDataCharsBySession.delete(sessionId)
-
-    const data = chunks.length === 1 ? (chunks[0] ?? '') : chunks.join('')
-    if (data.length === 0) {
-      return
-    }
-
-    ptyManager.appendSnapshotData(sessionId, data)
-
-    if (!hasPtyDataSubscribers(sessionId)) {
-      return
-    }
-
-    const eventPayload: TerminalDataEvent = { sessionId, data }
-    sendPtyDataToSubscribers(eventPayload)
-  }
-
-  const queuePtyDataBroadcast = (sessionId: string, data: string): void => {
-    if (data.length === 0) {
-      return
-    }
-
-    const chunks = pendingPtyDataChunksBySession.get(sessionId) ?? []
-    if (chunks.length === 0) {
-      pendingPtyDataChunksBySession.set(sessionId, chunks)
-    }
-
-    chunks.push(data)
-    const pendingChars = (pendingPtyDataCharsBySession.get(sessionId) ?? 0) + data.length
-    pendingPtyDataCharsBySession.set(sessionId, pendingChars)
-
-    if (pendingChars >= PTY_DATA_MAX_BATCH_CHARS) {
-      flushPtyDataBroadcast(sessionId)
-      return
-    }
-
-    const nextDelayMs = resolvePtyDataFlushDelay(pendingChars)
-    const existingTimer = pendingPtyDataFlushTimerBySession.get(sessionId)
-    const existingDelayMs = pendingPtyDataFlushDelayBySession.get(sessionId)
-
-    if (existingTimer && existingDelayMs !== undefined) {
-      if (existingDelayMs >= nextDelayMs) {
-        return
-      }
-
-      clearTimeout(existingTimer)
-      pendingPtyDataFlushTimerBySession.delete(sessionId)
-    }
-
-    pendingPtyDataFlushDelayBySession.set(sessionId, nextDelayMs)
-    pendingPtyDataFlushTimerBySession.set(
-      sessionId,
-      setTimeout(() => {
-        flushPtyDataBroadcast(sessionId)
-      }, nextDelayMs),
-    )
-  }
-
-  const registerSessionProbeState = (sessionId: string): void => {
-    terminalProbeBufferBySession.set(sessionId, '')
-  }
-
-  const clearSessionProbeState = (sessionId: string): void => {
-    terminalProbeBufferBySession.delete(sessionId)
-  }
-
-  const startSessionStateWatcher = ({
-    sessionId,
-    provider,
-    cwd,
-    launchMode,
-    resumeSessionId,
-    startedAtMs,
-    opencodeBaseUrl,
-  }: StartSessionStateWatcherInput): void => {
-    sessionStateWatcher.start({
-      sessionId,
-      provider,
-      cwd,
-      launchMode,
-      resumeSessionId,
-      startedAtMs,
-      opencodeBaseUrl,
-    })
-  }
-
-  const resolveTerminalProbeReplies = (sessionId: string, outputChunk: string): void => {
-    if (outputChunk.includes('\u001b[6n')) {
-      ptyManager.write(sessionId, '\u001b[1;1R')
-    }
-
-    if (outputChunk.includes('\u001b[?6n')) {
-      ptyManager.write(sessionId, '\u001b[?1;1R')
-    }
-
-    if (outputChunk.includes('\u001b[c')) {
-      ptyManager.write(sessionId, '\u001b[?1;2c')
-    }
-
-    if (outputChunk.includes('\u001b[>c')) {
-      ptyManager.write(sessionId, '\u001b[>0;115;0c')
-    }
-
-    if (outputChunk.includes('\u001b[?u')) {
-      ptyManager.write(sessionId, '\u001b[?0u')
-    }
-  }
-
-  const wirePtySessionEvents = (sessionId: string, pty: IPty): void => {
-    pty.onData(data => {
-      if (!hasPtyDataSubscribers(sessionId)) {
-        const probeBuffer = `${terminalProbeBufferBySession.get(sessionId) ?? ''}${data}`
-        resolveTerminalProbeReplies(sessionId, probeBuffer)
-        terminalProbeBufferBySession.set(sessionId, probeBuffer.slice(-32))
-      }
-
-      queuePtyDataBroadcast(sessionId, data)
-    })
-
-    pty.onExit(exit => {
-      flushPtyDataBroadcast(sessionId)
-      clearSessionProbeState(sessionId)
-      sessionStateWatcher.disposeSession(sessionId)
-      cleanupSessionPtyDataSubscriptions(sessionId)
-      ptyManager.delete(sessionId, { keepSnapshot: true })
-      const eventPayload: TerminalExitEvent = {
-        sessionId,
-        exitCode: exit.exitCode,
-      }
-      sendToAllWindows(IPC_CHANNELS.ptyExit, eventPayload)
-    })
-  }
+  const manager = new TerminalSessionManager({
+    adapterRegistry,
+    sendToAllWindows,
+    sendPtyDataToSubscriber,
+    trackWebContentsDestroyed,
+    sessionStateWatcher,
+  })
 
   return {
     listProfiles: async () => await profileResolver.listProfiles(),
     spawnTerminalSession: async input => {
       const resolved = await profileResolver.resolveTerminalSpawn(input)
-      const { sessionId, pty } = ptyManager.spawnSession({
+      const result = manager.open('local', {
+        sessionKind: 'local',
         cwd: resolved.cwd,
         command: resolved.command,
         args: resolved.args,
@@ -344,85 +121,71 @@ export function createPtyRuntime(): PtyRuntime {
         cols: input.cols,
         rows: input.rows,
       })
-      registerSessionProbeState(sessionId)
-      wirePtySessionEvents(sessionId, pty)
+      const opened = result instanceof Promise ? await result : result
 
       return {
-        sessionId,
+        sessionId: opened.sessionId,
         profileId: resolved.profileId,
         runtimeKind: resolved.runtimeKind,
       }
     },
     spawnSession: options => {
-      const { sessionId, pty } = ptyManager.spawnSession(options)
-      registerSessionProbeState(sessionId)
-      wirePtySessionEvents(sessionId, pty)
-      return { sessionId }
+      const result = manager.open('local', {
+        sessionKind: 'local',
+        cwd: options.cwd,
+        command: options.command,
+        args: options.args,
+        env: options.env,
+        shell: options.shell,
+        cols: options.cols,
+        rows: options.rows,
+      })
+
+      if (result instanceof Promise) {
+        throw new Error('spawnSession does not support async adapters')
+      }
+
+      return { sessionId: result.sessionId }
     },
     write: (sessionId, data, encoding = 'utf8') => {
-      ptyManager.write(sessionId, data, encoding)
-      sessionStateWatcher.noteInteraction(sessionId, data)
+      manager.write(sessionId, data, encoding)
     },
     resize: (sessionId, cols, rows) => {
-      ptyManager.resize(sessionId, cols, rows)
+      manager.resize(sessionId, cols, rows)
     },
     kill: sessionId => {
-      flushPtyDataBroadcast(sessionId)
-      clearSessionProbeState(sessionId)
-      sessionStateWatcher.disposeSession(sessionId)
-      cleanupSessionPtyDataSubscriptions(sessionId)
-      ptyManager.kill(sessionId)
+      manager.kill(sessionId)
     },
     attach: (contentsId, sessionId) => {
-      trackWebContentsSubscriptionLifecycle(contentsId)
-
-      const sessions = ptyDataSessionsByWebContentsId.get(contentsId) ?? new Set<string>()
-      sessions.add(sessionId)
-      ptyDataSessionsByWebContentsId.set(contentsId, sessions)
-
-      const subscribers = ptyDataSubscribersBySessionId.get(sessionId) ?? new Set<number>()
-      subscribers.add(contentsId)
-      ptyDataSubscribersBySessionId.set(sessionId, subscribers)
-
-      syncSessionProbeBuffer(sessionId)
-      flushPtyDataBroadcast(sessionId)
+      manager.attach(contentsId, sessionId)
     },
     detach: (contentsId, sessionId) => {
-      const sessions = ptyDataSessionsByWebContentsId.get(contentsId)
-      sessions?.delete(sessionId)
-      if (sessions && sessions.size === 0) {
-        ptyDataSessionsByWebContentsId.delete(contentsId)
-      }
-
-      const subscribers = ptyDataSubscribersBySessionId.get(sessionId)
-      subscribers?.delete(contentsId)
-      if (subscribers && subscribers.size === 0) {
-        ptyDataSubscribersBySessionId.delete(sessionId)
-      }
-
-      syncSessionProbeBuffer(sessionId)
+      manager.detach(contentsId, sessionId)
     },
     snapshot: sessionId => {
-      flushPtyDataBroadcast(sessionId)
-      return ptyManager.snapshot(sessionId)
+      return manager.snapshot(sessionId)
     },
-    startSessionStateWatcher,
-    dispose: () => {
-      sessionStateWatcher.dispose()
-
-      pendingPtyDataFlushTimerBySession.forEach(timer => {
-        clearTimeout(timer)
+    startSessionStateWatcher: ({
+      sessionId,
+      provider,
+      cwd,
+      launchMode,
+      resumeSessionId,
+      startedAtMs,
+      opencodeBaseUrl,
+    }) => {
+      manager.startSessionStateWatcher({
+        sessionId,
+        provider,
+        cwd,
+        launchMode,
+        resumeSessionId,
+        startedAtMs,
+        opencodeBaseUrl,
       })
-      pendingPtyDataFlushTimerBySession.clear()
-      pendingPtyDataFlushDelayBySession.clear()
-      pendingPtyDataChunksBySession.clear()
-      pendingPtyDataCharsBySession.clear()
-      ptyDataSubscribersBySessionId.clear()
-      ptyDataSessionsByWebContentsId.clear()
-      ptyDataSubscribedWebContentsIds.clear()
-      terminalProbeBufferBySession.clear()
-
-      ptyManager.disposeAll()
+    },
+    dispose: () => {
+      manager.dispose()
     },
   }
 }
