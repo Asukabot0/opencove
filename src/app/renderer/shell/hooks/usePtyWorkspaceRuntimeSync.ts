@@ -76,7 +76,7 @@ export function updateWorkspacesWithAgentExit({
   workspaces: WorkspaceState[]
   sessionId: string
   excludeWorkspaceId: string | null
-  exitCode: number
+  exitCode: number | null
   now: string
 }): { nextWorkspaces: WorkspaceState[]; didChange: boolean } {
   let didChange = false
@@ -99,11 +99,13 @@ export function updateWorkspacesWithAgentExit({
 
       workspaceDidChange = true
 
+      const status = exitCode === 0 ? ('exited' as const) : ('failed' as const)
+
       return {
         ...node,
         data: {
           ...node.data,
-          status: exitCode === 0 ? ('exited' as const) : ('failed' as const),
+          status,
           endedAt: now,
           exitCode,
         },
