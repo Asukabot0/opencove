@@ -57,6 +57,7 @@ export const spaces = sqliteTable('workspace_spaces', {
   rectY: real('rect_y'),
   rectWidth: real('rect_width'),
   rectHeight: real('rect_height'),
+  targetId: text('target_id'),
 })
 
 export const spaceNodes = sqliteTable(
@@ -70,6 +71,24 @@ export const spaceNodes = sqliteTable(
     pk: primaryKey({ columns: [table.spaceId, table.nodeId] }),
   }),
 )
+
+export const remoteTargets = sqliteTable('remote_targets', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull(),
+  name: text('name').notNull(),
+  host: text('host').notNull(),
+  port: integer('port').notNull().default(22),
+  username: text('username').notNull(),
+  authMethod: text('auth_method').notNull().default('key'),
+  keyPath: text('key_path'),
+  forwardAgent: integer('forward_agent').notNull().default(0),
+  source: text('source').notNull().default('manual'),
+  importedFrom: text('imported_from'),
+  secretRef: text('secret_ref'),
+  connectTimeout: integer('connect_timeout').notNull().default(10000),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
 
 export const nodeScrollback = sqliteTable('node_scrollback', {
   nodeId: text('node_id').primaryKey(),
