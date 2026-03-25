@@ -64,7 +64,26 @@ function createTables(db: Database.Database): void {
       rect_x REAL,
       rect_y REAL,
       rect_width REAL,
-      rect_height REAL
+      rect_height REAL,
+      target_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS remote_targets (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL DEFAULT 22,
+      username TEXT NOT NULL,
+      auth_method TEXT NOT NULL DEFAULT 'key',
+      key_path TEXT,
+      forward_agent INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'manual',
+      imported_from TEXT,
+      secret_ref TEXT,
+      connect_timeout INTEGER NOT NULL DEFAULT 10000,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS workspace_space_nodes (
@@ -158,6 +177,22 @@ export function migrate(db: Database.Database): void {
       db.exec(`
         ALTER TABLE workspace_spaces
         ADD COLUMN label_color TEXT
+      `)
+    } catch {
+      // ignore (column already exists)
+    }
+
+    db.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
+    return
+  }
+
+  if (currentVersion === 4) {
+    createTables(db)
+
+    try {
+      db.exec(`
+        ALTER TABLE workspace_spaces
+        ADD COLUMN target_id TEXT
       `)
     } catch {
       // ignore (column already exists)
