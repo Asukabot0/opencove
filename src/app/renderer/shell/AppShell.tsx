@@ -12,6 +12,7 @@ import { CommandCenter } from './components/CommandCenter'
 import { DeleteProjectDialog } from './components/DeleteProjectDialog'
 import { ProjectContextMenu } from './components/ProjectContextMenu'
 import { Sidebar } from './components/Sidebar'
+import { SpaceArchiveRecordsWindow } from './components/SpaceArchiveRecordsWindow'
 import { WorkspaceMain } from './components/WorkspaceMain'
 import { WorkspaceSearchOverlay } from './components/WorkspaceSearchOverlay'
 import { useHydrateAppState } from './hooks/useHydrateAppState'
@@ -93,10 +94,12 @@ export default function App(): React.JSX.Element {
 
   const [isCommandCenterOpen, setIsCommandCenterOpen] = useState(false)
   const [isWorkspaceSearchOpen, setIsWorkspaceSearchOpen] = useState(false)
+  const [isSpaceArchivesOpen, setIsSpaceArchivesOpen] = useState(false)
   const [isFocusNodeTargetZoomPreviewing, setIsFocusNodeTargetZoomPreviewing] = useState(false)
 
   const toggleCommandCenter = useCallback((): void => {
     setIsWorkspaceSearchOpen(false)
+    setIsSpaceArchivesOpen(false)
     setIsCommandCenterOpen(open => !open)
   }, [])
 
@@ -106,11 +109,22 @@ export default function App(): React.JSX.Element {
 
   const openWorkspaceSearch = useCallback((): void => {
     closeCommandCenter()
+    setIsSpaceArchivesOpen(false)
     setIsWorkspaceSearchOpen(true)
   }, [closeCommandCenter])
 
   const closeWorkspaceSearch = useCallback((): void => {
     setIsWorkspaceSearchOpen(false)
+  }, [])
+
+  const openSpaceArchives = useCallback((): void => {
+    closeCommandCenter()
+    closeWorkspaceSearch()
+    setIsSpaceArchivesOpen(true)
+  }, [closeCommandCenter, closeWorkspaceSearch])
+
+  const closeSpaceArchives = useCallback((): void => {
+    setIsSpaceArchivesOpen(false)
   }, [])
 
   useAppKeybindings({
@@ -123,11 +137,13 @@ export default function App(): React.JSX.Element {
     onOpenSettings: () => {
       closeCommandCenter()
       closeWorkspaceSearch()
+      closeSpaceArchives()
       setIsSettingsOpen(true)
     },
     onTogglePrimarySidebar: () => {
       closeCommandCenter()
       closeWorkspaceSearch()
+      closeSpaceArchives()
       setAgentSettings(prev => ({
         ...prev,
         isPrimarySidebarCollapsed: !prev.isPrimarySidebarCollapsed,
@@ -136,6 +152,7 @@ export default function App(): React.JSX.Element {
     onAddProject: () => {
       closeCommandCenter()
       closeWorkspaceSearch()
+      closeSpaceArchives()
       void handleAddWorkspace()
     },
     onOpenWorkspaceSearch: () => {
@@ -150,6 +167,7 @@ export default function App(): React.JSX.Element {
 
     setIsCommandCenterOpen(false)
     setIsWorkspaceSearchOpen(false)
+    setIsSpaceArchivesOpen(false)
   }, [isSettingsOpen, projectDeleteConfirmation])
 
   useEffect(() => {
@@ -241,6 +259,7 @@ export default function App(): React.JSX.Element {
       isMinimapVisible: DEFAULT_WORKSPACE_MINIMAP_VISIBLE,
       spaces: [],
       activeSpaceId: null,
+      spaceArchiveRecords: [],
     }
 
     store.setWorkspaces(prev => [...prev, nextWorkspace])
@@ -254,6 +273,8 @@ export default function App(): React.JSX.Element {
     handleWorkspaceMinimapVisibilityChange,
     handleWorkspaceSpacesChange,
     handleWorkspaceActiveSpaceChange,
+    handleWorkspaceSpaceArchiveRecordAppend,
+    handleWorkspaceSpaceArchiveRecordRemove,
     handleAnyWorkspaceWorktreesRootChange,
   } = useWorkspaceStateHandlers({ requestPersistFlush })
 
@@ -363,6 +384,7 @@ export default function App(): React.JSX.Element {
             !isSettingsOpen &&
             !isCommandCenterOpen &&
             !isWorkspaceSearchOpen &&
+            !isSpaceArchivesOpen &&
             projectDeleteConfirmation === null
           }
           onAddWorkspace={() => {
@@ -370,6 +392,7 @@ export default function App(): React.JSX.Element {
           }}
           onShowMessage={handleShowMessage}
           onRequestPersistFlush={requestPersistFlush}
+          onAppendSpaceArchiveRecord={handleWorkspaceSpaceArchiveRecordAppend}
           onNodesChange={handleWorkspaceNodesChange}
           onViewportChange={handleWorkspaceViewportChange}
           onMinimapVisibilityChange={handleWorkspaceMinimapVisibilityChange}
@@ -410,6 +433,9 @@ export default function App(): React.JSX.Element {
           setIsFocusNodeTargetZoomPreviewing(false)
           setIsSettingsOpen(true)
         }}
+        onOpenSpaceArchives={() => {
+          openSpaceArchives()
+        }}
         onTogglePrimarySidebar={() => {
           setAgentSettings(prev => ({
             ...prev,
@@ -425,6 +451,14 @@ export default function App(): React.JSX.Element {
         onSelectSpace={spaceId => {
           handleWorkspaceActiveSpaceChange(spaceId)
         }}
+      />
+
+      <SpaceArchiveRecordsWindow
+        isOpen={isSpaceArchivesOpen}
+        workspace={activeWorkspace}
+        canvasInputModeSetting={agentSettings.canvasInputMode}
+        onDeleteRecord={handleWorkspaceSpaceArchiveRecordRemove}
+        onClose={closeSpaceArchives}
       />
 
       {projectContextMenu ? (
@@ -481,7 +515,6 @@ export default function App(): React.JSX.Element {
           }}
         />
       ) : null}
-
       <WhatsNewDialog
         isOpen={whatsNew.isOpen}
         fromVersion={whatsNew.fromVersion}
