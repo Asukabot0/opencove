@@ -89,6 +89,8 @@ export interface SshCredentialRequestDto {
   targetId: string
   type: 'password' | 'passphrase' | 'keyboard-interactive'
   prompt?: string
+  user?: string
+  host?: string
 }
 
 export interface SshCredentialResponseDto {

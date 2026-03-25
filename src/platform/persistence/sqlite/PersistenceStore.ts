@@ -26,6 +26,8 @@ export interface PersistenceStore {
   readNodeScrollback: (nodeId: string) => Promise<string | null>
   writeNodeScrollback: (nodeId: string, scrollback: string | null) => Promise<PersistWriteResult>
 
+  drizzleDb: BetterSQLite3Database
+
   consumeRecovery: () => PersistenceRecoveryReason | null
   dispose: () => void
 }
@@ -242,6 +244,7 @@ export async function createPersistenceStore(options: {
     writeAppState,
     readNodeScrollback,
     writeNodeScrollback,
+    drizzleDb: db,
     consumeRecovery: () => {
       const current = recovery
       recovery = null

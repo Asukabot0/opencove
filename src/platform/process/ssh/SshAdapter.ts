@@ -19,6 +19,8 @@ export interface SshCredentialRequest {
   targetId: string
   type: 'password' | 'passphrase' | 'keyboard-interactive'
   prompt?: string
+  user?: string
+  host?: string
 }
 
 export interface SshCredentialResponse {
@@ -29,7 +31,12 @@ export interface SshCredentialResponse {
 
 export type CredentialResolver = (request: SshCredentialRequest) => Promise<SshCredentialResponse>
 
-export type HostKeyVerifier = (host: string, port: number, fingerprint: string) => Promise<boolean>
+export type HostKeyVerifier = (
+  host: string,
+  port: number,
+  keyType: string,
+  keyData: string,
+) => Promise<boolean>
 
 export interface SshAdapterDeps {
   credentialResolver: CredentialResolver
@@ -76,36 +83,71 @@ export class SshAdapter implements TerminalSessionAdapter {
 
     const connectConfig = await this.buildConnectConfig(options)
 
+    // Capture the server's host key during SSH handshake for post-ready verification
+    let capturedHostKey: Buffer | null = null
+    connectConfig.hostVerifier = (key: Buffer) => {
+      capturedHostKey = key
+      return true // Accept tentatively; actual verification happens after 'ready'
+    }
+
     return new Promise<TerminalSessionOpenResult>((resolve, reject) => {
       client.on('ready', () => {
-        client.shell(
-          { term: 'xterm-256color', cols: options.cols, rows: options.rows },
-          (err, shellStream) => {
-            if (err) {
-              this.cleanupSession(sessionId)
-              reject(err)
+        const verifyAndOpenShell = async () => {
+          // Verify captured host key before opening shell
+          if (capturedHostKey) {
+            try {
+              const keyTypeLen = capturedHostKey.readUInt32BE(0)
+              const keyType = capturedHostKey.subarray(4, 4 + keyTypeLen).toString('ascii')
+              const keyData = capturedHostKey.toString('base64')
+              const verified = await this.deps.hostKeyVerifier(
+                options.sshHost!,
+                options.sshPort ?? 22,
+                keyType,
+                keyData,
+              )
+              if (!verified) {
+                client.end()
+                reject(new Error('Host key verification rejected'))
+                return
+              }
+            } catch (err) {
+              client.end()
+              reject(err instanceof Error ? err : new Error(String(err)))
               return
             }
+          }
 
-            session.stream = shellStream
-
-            shellStream.on('data', (data: Buffer) => {
-              const str = data.toString('utf8')
-              for (const cb of session.dataCallbacks) {
-                cb(str)
+          client.shell(
+            { term: 'xterm-256color', cols: options.cols, rows: options.rows },
+            (err, shellStream) => {
+              if (err) {
+                this.cleanupSession(sessionId)
+                reject(err)
+                return
               }
-            })
 
-            shellStream.on('close', () => {
-              for (const cb of session.exitCallbacks) {
-                cb({ exitCode: null })
-              }
-              this.cleanupSession(sessionId)
-            })
+              session.stream = shellStream
 
-            resolve({ sessionId, stream })
-          },
-        )
+              shellStream.on('data', (data: Buffer) => {
+                const str = data.toString('utf8')
+                for (const cb of session.dataCallbacks) {
+                  cb(str)
+                }
+              })
+
+              shellStream.on('close', () => {
+                for (const cb of session.exitCallbacks) {
+                  cb({ exitCode: null })
+                }
+                this.cleanupSession(sessionId)
+              })
+
+              resolve({ sessionId, stream })
+            },
+          )
+        }
+
+        void verifyAndOpenShell()
       })
 
       client.on('error', err => {
@@ -185,6 +227,7 @@ export class SshAdapter implements TerminalSessionAdapter {
       host: options.sshHost,
       port: options.sshPort ?? 22,
       username: options.sshUsername,
+      readyTimeout: options.connectTimeout ?? 10_000,
       keepaliveInterval: KEEPALIVE_INTERVAL_MS,
       keepaliveCountMax: KEEPALIVE_COUNT_MAX,
     }
@@ -192,13 +235,6 @@ export class SshAdapter implements TerminalSessionAdapter {
     if (options.sshForwardAgent) {
       config.agentForward = true
     }
-
-    const hostVerified = await this.deps.hostKeyVerifier(config.host!, config.port!, '')
-    if (!hostVerified) {
-      throw new Error('Host key verification rejected')
-    }
-
-    config.hostVerifier = () => true
 
     if (options.sshAuthMethod === 'agent') {
       config.agent = process.env.SSH_AUTH_SOCK
@@ -212,6 +248,8 @@ export class SshAdapter implements TerminalSessionAdapter {
           options.targetId ?? '',
           'passphrase',
           'Enter passphrase for SSH key',
+          options.sshUsername,
+          options.sshHost,
         )
         config.passphrase = response
       }
@@ -220,6 +258,8 @@ export class SshAdapter implements TerminalSessionAdapter {
         options.targetId ?? '',
         'password',
         'Enter SSH password',
+        options.sshUsername,
+        options.sshHost,
       )
       config.password = response
     }
@@ -231,10 +271,16 @@ export class SshAdapter implements TerminalSessionAdapter {
     targetId: string,
     type: 'password' | 'passphrase' | 'keyboard-interactive',
     prompt: string,
+    user?: string,
+    host?: string,
   ): Promise<string> {
     const requestId = randomUUID()
+    let timeoutId: ReturnType<typeof setTimeout>
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Credential request timed out')), CREDENTIAL_TIMEOUT_MS)
+      timeoutId = setTimeout(
+        () => reject(new Error('Credential request timed out')),
+        CREDENTIAL_TIMEOUT_MS,
+      )
     })
 
     const credentialPromise = this.deps.credentialResolver({
@@ -242,13 +288,21 @@ export class SshAdapter implements TerminalSessionAdapter {
       targetId,
       type,
       prompt,
+      user,
+      host,
     })
 
-    const response = await Promise.race([credentialPromise, timeoutPromise])
-    if (response.cancelled) {
-      throw new Error('Credential request cancelled by user')
+    try {
+      const response = await Promise.race([credentialPromise, timeoutPromise])
+      clearTimeout(timeoutId!)
+      if (response.cancelled) {
+        throw new Error('Credential request cancelled by user')
+      }
+      return response.value
+    } catch (err) {
+      clearTimeout(timeoutId!)
+      throw err
     }
-    return response.value
   }
 
   private keyNeedsPassphrase(keyData: string): boolean {

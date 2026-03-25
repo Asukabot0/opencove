@@ -21,6 +21,8 @@ function isOptionalBoolean(v: unknown): boolean {
   return v === undefined || typeof v === 'boolean'
 }
 
+const VALID_AUTH_METHODS = ['key', 'password', 'agent', 'keyboard-interactive']
+
 export function validateCreateTarget(input: unknown): CreateRemoteTargetInput | null {
   if (!input || typeof input !== 'object') {
     return null
@@ -42,7 +44,7 @@ export function validateCreateTarget(input: unknown): CreateRemoteTargetInput | 
   if (!isOptionalNumber(o.port)) {
     return null
   }
-  if (!isOptionalString(o.authMethod)) {
+  if (o.authMethod !== undefined && !VALID_AUTH_METHODS.includes(o.authMethod as string)) {
     return null
   }
   if (!isOptionalString(o.keyPath)) {
@@ -79,7 +81,7 @@ export function validateUpdateTarget(input: unknown): UpdateRemoteTargetInput | 
   if (!isOptionalString(o.username)) {
     return null
   }
-  if (!isOptionalString(o.authMethod)) {
+  if (o.authMethod !== undefined && !VALID_AUTH_METHODS.includes(o.authMethod as string)) {
     return null
   }
   if (!isOptionalString(o.keyPath)) {

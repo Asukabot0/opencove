@@ -18,11 +18,15 @@ export function SshCredentialDialog() {
   }, [])
 
   useEffect(() => {
-    if (request) {inputRef.current?.focus()}
+    if (request) {
+      inputRef.current?.focus()
+    }
   }, [request])
 
   const submit = useCallback(() => {
-    if (!request) {return}
+    if (!request) {
+      return
+    }
     window.opencoveApi.ssh.sendCredentialResponse({
       requestId: request.requestId,
       value,
@@ -32,7 +36,9 @@ export function SshCredentialDialog() {
   }, [request, value])
 
   const cancel = useCallback(() => {
-    if (!request) {return}
+    if (!request) {
+      return
+    }
     window.opencoveApi.ssh.sendCredentialResponse({
       requestId: request.requestId,
       value: '',
@@ -42,11 +48,16 @@ export function SshCredentialDialog() {
     setValue('')
   }, [request])
 
-  if (!request) {return null}
+  if (!request) {
+    return null
+  }
 
   const prompt =
     request.type === 'password'
-      ? t('remote.credential.passwordPrompt', { user: '', host: '' })
+      ? t('remote.credential.passwordPrompt', {
+          user: request.user ?? '',
+          host: request.host ?? '',
+        })
       : t('remote.credential.passphrasePrompt')
 
   return (
@@ -62,8 +73,12 @@ export function SshCredentialDialog() {
           value={value}
           onChange={e => setValue(e.target.value)}
           onKeyDown={e => {
-            if (e.key === 'Enter') {submit()}
-            if (e.key === 'Escape') {cancel()}
+            if (e.key === 'Enter') {
+              submit()
+            }
+            if (e.key === 'Escape') {
+              cancel()
+            }
           }}
           className="mb-3 w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-blue-500"
           autoComplete="off"

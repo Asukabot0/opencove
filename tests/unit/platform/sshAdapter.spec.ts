@@ -53,10 +53,20 @@ describe('SshAdapter', () => {
       return mockClient
     })
 
-    mockClient.connect.mockImplementation(() => {
+    mockClient.connect.mockImplementation((config: { hostVerifier?: (key: Buffer) => boolean }) => {
+      // Simulate ssh2 calling hostVerifier with a mock host key in wire format
+      if (config.hostVerifier) {
+        const keyType = 'ssh-ed25519'
+        const keyBuf = Buffer.alloc(4 + keyType.length + 32)
+        keyBuf.writeUInt32BE(keyType.length, 0)
+        keyBuf.write(keyType, 4)
+        config.hostVerifier(keyBuf)
+      }
       // Auto-trigger ready
       const handler = (mockClient as Record<string, unknown>)._readyHandler as () => void
-      if (handler) {setTimeout(handler, 0)}
+      if (handler) {
+        setTimeout(handler, 0)
+      }
     })
 
     mockClient.shell.mockImplementation(

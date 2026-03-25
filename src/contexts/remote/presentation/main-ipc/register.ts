@@ -16,50 +16,56 @@ import {
   validateImportSshConfig,
 } from './validate'
 
-export function registerRemoteIpcHandlers(repo: RemoteTargetRepository): void {
-  ipcMain.handle(IPC_CHANNELS.remoteListTargets, (_event, workspaceId: string) => {
+export function registerRemoteIpcHandlers(getRepo: () => Promise<RemoteTargetRepository>): void {
+  ipcMain.handle(IPC_CHANNELS.remoteListTargets, async (_event, workspaceId: string) => {
     if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
       return []
     }
+    const repo = await getRepo()
     return listTargets(repo, workspaceId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.remoteGetTarget, (_event, id: string) => {
+  ipcMain.handle(IPC_CHANNELS.remoteGetTarget, async (_event, id: string) => {
     if (typeof id !== 'string' || !id.trim()) {
       return null
     }
+    const repo = await getRepo()
     return getTarget(repo, id)
   })
 
-  ipcMain.handle(IPC_CHANNELS.remoteCreateTarget, (_event, input: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.remoteCreateTarget, async (_event, input: unknown) => {
     const validated = validateCreateTarget(input)
     if (!validated) {
       return { error: 'invalid_input', message: 'Invalid create target payload' }
     }
+    const repo = await getRepo()
     return createTarget(repo, validated)
   })
 
-  ipcMain.handle(IPC_CHANNELS.remoteUpdateTarget, (_event, input: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.remoteUpdateTarget, async (_event, input: unknown) => {
     const validated = validateUpdateTarget(input)
     if (!validated) {
       return { error: 'invalid_input', message: 'Invalid update target payload' }
     }
+    const repo = await getRepo()
     return updateTarget(repo, validated)
   })
 
-  ipcMain.handle(IPC_CHANNELS.remoteDeleteTarget, (_event, input: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.remoteDeleteTarget, async (_event, input: unknown) => {
     const validated = validateDeleteTarget(input)
     if (!validated) {
       return { error: 'invalid_input', message: 'Invalid delete target payload' }
     }
+    const repo = await getRepo()
     return deleteTarget(repo, validated.id, validated.force)
   })
 
-  ipcMain.handle(IPC_CHANNELS.remoteImportSshConfig, (_event, input: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.remoteImportSshConfig, async (_event, input: unknown) => {
     const validated = validateImportSshConfig(input)
     if (!validated) {
       return { error: 'invalid_input', message: 'Invalid import config payload' }
     }
+    const repo = await getRepo()
     return importSshConfig(
       repo,
       validated.workspaceId,

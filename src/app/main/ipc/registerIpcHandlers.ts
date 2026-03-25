@@ -22,8 +22,6 @@ import { registerWindowMetricsIpcHandlers } from './registerWindowMetricsIpcHand
 import { registerRemoteIpcHandlers } from '../../../contexts/remote/presentation/main-ipc/register'
 import { registerCredentialResponseHandler } from '../../../contexts/remote/presentation/main-ipc/credentialIpc'
 import { DrizzleRemoteTargetRepository } from '../../../contexts/remote/infrastructure/DrizzleRemoteTargetRepository'
-import Database from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
 
 export type { IpcRegistrationDisposable } from './types'
 
@@ -51,14 +49,14 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     return await persistenceStorePromise
   }
 
-  // Remote target repository (shares db path with persistence store)
-  const dbPath = resolve(app.getPath('userData'), 'opencove.db')
-  const remoteSqlite = new Database(dbPath)
-  const remoteDb = drizzle(remoteSqlite)
-  const remoteTargetRepo = new DrizzleRemoteTargetRepository(remoteDb)
+  // Remote target repository (reuses persistence store's shared db connection)
+  const getRemoteTargetRepo = async () => {
+    const store = await getPersistenceStore()
+    return new DrizzleRemoteTargetRepository(store.drizzleDb)
+  }
 
   // Register remote IPC + credential response handler
-  registerRemoteIpcHandlers(remoteTargetRepo)
+  registerRemoteIpcHandlers(getRemoteTargetRepo)
   registerCredentialResponseHandler()
 
   if (process.env.NODE_ENV === 'test' && process.env.OPENCOVE_TEST_WORKSPACE) {
@@ -95,12 +93,6 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
         .catch(() => {
           // ignore
         })
-
-      try {
-        remoteSqlite.close()
-      } catch {
-        // ignore
-      }
     },
   }
 }

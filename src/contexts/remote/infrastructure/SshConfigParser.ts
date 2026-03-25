@@ -1,6 +1,6 @@
 import SSHConfig from 'ssh-config'
 import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import type { AuthMethod } from '../domain/types'
 
@@ -41,9 +41,13 @@ export function parseSshConfig(configPath?: string): SshConfigParseResult {
   const hosts: ParsedSshHost[] = []
 
   for (const section of config) {
-    if (section.type !== SSHConfig.DIRECTIVE || section.param !== 'Host') {continue}
+    if (section.type !== SSHConfig.DIRECTIVE || section.param !== 'Host') {
+      continue
+    }
     const hostPattern = String(section.value ?? '')
-    if (!hostPattern || hostPattern.includes('*') || hostPattern.includes('?')) {continue}
+    if (!hostPattern || hostPattern.includes('*') || hostPattern.includes('?')) {
+      continue
+    }
 
     const computed = config.compute(hostPattern)
 
@@ -95,6 +99,8 @@ export function parseSshConfig(configPath?: string): SshConfigParseResult {
 }
 
 export function inferAuthMethod(host: ParsedSshHost): AuthMethod {
-  if (host.identityFile) {return 'key'}
+  if (host.identityFile) {
+    return 'key'
+  }
   return 'agent'
 }

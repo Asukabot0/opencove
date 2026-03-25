@@ -173,6 +173,7 @@ export function createPtyRuntime(): PtyRuntime {
       resumeSessionId,
       startedAtMs,
       opencodeBaseUrl,
+      geminiDiscoveryCursor,
     }) => {
       manager.startSessionStateWatcher({
         sessionId,
@@ -182,6 +183,7 @@ export function createPtyRuntime(): PtyRuntime {
         resumeSessionId,
         startedAtMs,
         opencodeBaseUrl,
+        geminiDiscoveryCursor,
       })
     },
     dispose: () => {

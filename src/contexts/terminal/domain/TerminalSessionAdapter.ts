@@ -23,6 +23,7 @@ export interface TerminalSessionOpenOptions {
   sshAuthMethod?: string
   sshKeyPath?: string
   sshForwardAgent?: boolean
+  connectTimeout?: number
 }
 
 export interface TerminalSessionOpenResult {

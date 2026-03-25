@@ -16,6 +16,7 @@ interface PendingRequest {
   resolve: (response: SshCredentialResponseDto) => void
   reject: (error: Error) => void
   cleanup: () => void
+  webContentsId: number
 }
 
 const pendingRequests = new Map<string, PendingRequest>()
@@ -31,6 +32,8 @@ export function createWebContentsCredentialResolver(webContents: WebContents): C
       targetId: request.targetId,
       type: request.type,
       prompt: request.prompt,
+      user: request.user,
+      host: request.host,
     }
 
     return new Promise<SshCredentialResponseDto>((resolve, reject) => {
@@ -60,7 +63,12 @@ export function createWebContentsCredentialResolver(webContents: WebContents): C
         }
       }
 
-      pendingRequests.set(request.requestId, { resolve, reject, cleanup })
+      pendingRequests.set(request.requestId, {
+        resolve,
+        reject,
+        cleanup,
+        webContentsId: webContents.id,
+      })
       webContents.once('destroyed', onDestroyed)
 
       // Send credential request to the specific webContents
@@ -74,7 +82,7 @@ export function createWebContentsCredentialResolver(webContents: WebContents): C
  * Must be called once during app startup.
  */
 export function registerCredentialResponseHandler(): void {
-  ipcMain.on(IPC_CHANNELS.sshCredentialResponse, (_event, response: unknown) => {
+  ipcMain.on(IPC_CHANNELS.sshCredentialResponse, (event, response: unknown) => {
     if (!response || typeof response !== 'object') {
       return
     }
@@ -85,6 +93,11 @@ export function registerCredentialResponseHandler(): void {
 
     const pending = pendingRequests.get(dto.requestId)
     if (!pending) {
+      return
+    }
+
+    // Verify the response comes from the expected webContents
+    if (event.sender.id !== pending.webContentsId) {
       return
     }
 

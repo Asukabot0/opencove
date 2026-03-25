@@ -6,7 +6,9 @@ import type {
 } from '../../../shared/contracts/dto'
 import type {
   TerminalSessionAdapter,
+  TerminalSessionAdapterStream,
   TerminalSessionOpenOptions,
+  TerminalSessionOpenResult,
 } from '../domain/TerminalSessionAdapter'
 import type { SessionKind } from '../domain/types'
 import type {
@@ -429,12 +431,4 @@ export class TerminalSessionManager {
     this.sessionKindMap.clear()
     this.sessionAgentWatcherSupport.clear()
   }
-}
-
-// Re-export types used by the open() method return
-import type { TerminalSessionAdapterStream } from '../domain/TerminalSessionAdapter'
-
-export interface TerminalSessionOpenResult {
-  sessionId: string
-  stream: TerminalSessionAdapterStream
 }
