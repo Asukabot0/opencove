@@ -1,4 +1,4 @@
-import type { DisconnectReason } from '@contexts/remote/domain/types'
+import type { DisconnectReason } from '../../../contexts/remote/domain/types'
 
 export interface RemoteTargetDto {
   id: string

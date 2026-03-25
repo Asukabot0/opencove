@@ -3,7 +3,7 @@ import type {
   UpdateRemoteTargetInput,
   DeleteRemoteTargetInput,
   ImportSshConfigInput,
-} from '@shared/contracts/dto/remote'
+} from '../../../../shared/contracts/dto/remote'
 
 function isNonEmptyString(v: unknown): v is string {
   return typeof v === 'string' && v.trim().length > 0
@@ -22,55 +22,107 @@ function isOptionalBoolean(v: unknown): boolean {
 }
 
 export function validateCreateTarget(input: unknown): CreateRemoteTargetInput | null {
-  if (!input || typeof input !== 'object') {return null}
+  if (!input || typeof input !== 'object') {
+    return null
+  }
   const o = input as Record<string, unknown>
 
-  if (!isNonEmptyString(o.workspaceId)) {return null}
-  if (!isNonEmptyString(o.name)) {return null}
-  if (!isNonEmptyString(o.host)) {return null}
-  if (!isNonEmptyString(o.username)) {return null}
-  if (!isOptionalNumber(o.port)) {return null}
-  if (!isOptionalString(o.authMethod)) {return null}
-  if (!isOptionalString(o.keyPath)) {return null}
-  if (!isOptionalBoolean(o.forwardAgent)) {return null}
-  if (!isOptionalNumber(o.connectTimeout)) {return null}
+  if (!isNonEmptyString(o.workspaceId)) {
+    return null
+  }
+  if (!isNonEmptyString(o.name)) {
+    return null
+  }
+  if (!isNonEmptyString(o.host)) {
+    return null
+  }
+  if (!isNonEmptyString(o.username)) {
+    return null
+  }
+  if (!isOptionalNumber(o.port)) {
+    return null
+  }
+  if (!isOptionalString(o.authMethod)) {
+    return null
+  }
+  if (!isOptionalString(o.keyPath)) {
+    return null
+  }
+  if (!isOptionalBoolean(o.forwardAgent)) {
+    return null
+  }
+  if (!isOptionalNumber(o.connectTimeout)) {
+    return null
+  }
 
   return input as CreateRemoteTargetInput
 }
 
 export function validateUpdateTarget(input: unknown): UpdateRemoteTargetInput | null {
-  if (!input || typeof input !== 'object') {return null}
+  if (!input || typeof input !== 'object') {
+    return null
+  }
   const o = input as Record<string, unknown>
 
-  if (!isNonEmptyString(o.id)) {return null}
-  if (!isOptionalString(o.name)) {return null}
-  if (!isOptionalString(o.host)) {return null}
-  if (!isOptionalNumber(o.port)) {return null}
-  if (!isOptionalString(o.username)) {return null}
-  if (!isOptionalString(o.authMethod)) {return null}
-  if (!isOptionalString(o.keyPath)) {return null}
-  if (!isOptionalBoolean(o.forwardAgent)) {return null}
-  if (!isOptionalNumber(o.connectTimeout)) {return null}
+  if (!isNonEmptyString(o.id)) {
+    return null
+  }
+  if (!isOptionalString(o.name)) {
+    return null
+  }
+  if (!isOptionalString(o.host)) {
+    return null
+  }
+  if (!isOptionalNumber(o.port)) {
+    return null
+  }
+  if (!isOptionalString(o.username)) {
+    return null
+  }
+  if (!isOptionalString(o.authMethod)) {
+    return null
+  }
+  if (!isOptionalString(o.keyPath)) {
+    return null
+  }
+  if (!isOptionalBoolean(o.forwardAgent)) {
+    return null
+  }
+  if (!isOptionalNumber(o.connectTimeout)) {
+    return null
+  }
 
   return input as UpdateRemoteTargetInput
 }
 
 export function validateDeleteTarget(input: unknown): DeleteRemoteTargetInput | null {
-  if (!input || typeof input !== 'object') {return null}
+  if (!input || typeof input !== 'object') {
+    return null
+  }
   const o = input as Record<string, unknown>
 
-  if (!isNonEmptyString(o.id)) {return null}
-  if (!isOptionalBoolean(o.force)) {return null}
+  if (!isNonEmptyString(o.id)) {
+    return null
+  }
+  if (!isOptionalBoolean(o.force)) {
+    return null
+  }
 
   return input as DeleteRemoteTargetInput
 }
 
 export function validateImportSshConfig(input: unknown): ImportSshConfigInput | null {
-  if (!input || typeof input !== 'object') {return null}
+  if (!input || typeof input !== 'object') {
+    return null
+  }
   const o = input as Record<string, unknown>
 
-  if (!isNonEmptyString(o.workspaceId)) {return null}
-  if (!isOptionalString(o.configPath)) {return null}
+  if (!isNonEmptyString(o.workspaceId)) {
+    return null
+  }
+  if (!isOptionalString(o.configPath)) {
+    return null
+  }
   if (o.conflictStrategy !== undefined) {
     if (!['skip', 'overwrite', 'create-duplicate'].includes(o.conflictStrategy as string)) {
       return null

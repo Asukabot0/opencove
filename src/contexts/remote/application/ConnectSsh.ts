@@ -5,7 +5,7 @@ import type {
   SshConnectInput,
   SshConnectResult,
   SshConnectError,
-} from '@shared/contracts/dto/remote'
+} from '../../../shared/contracts/dto/remote'
 
 export type SshConnectOutcome = SshConnectResult | SshConnectError
 
@@ -62,11 +62,20 @@ export async function connectSsh(
 
 function classifyConnectError(message: string): DisconnectReason {
   const msg = message.toLowerCase()
-  if (msg.includes('authentication') || msg.includes('auth')) {return 'auth_failed'}
-  if (msg.includes('network') || msg.includes('econnrefused') || msg.includes('ehostunreach'))
-    {return 'network_unreachable'}
-  if (msg.includes('host key')) {return 'host_key_mismatch'}
-  if (msg.includes('timed out') || msg.includes('timeout')) {return 'timeout'}
-  if (msg.includes('cancelled') || msg.includes('canceled')) {return 'user_cancelled'}
+  if (msg.includes('authentication') || msg.includes('auth')) {
+    return 'auth_failed'
+  }
+  if (msg.includes('network') || msg.includes('econnrefused') || msg.includes('ehostunreach')) {
+    return 'network_unreachable'
+  }
+  if (msg.includes('host key')) {
+    return 'host_key_mismatch'
+  }
+  if (msg.includes('timed out') || msg.includes('timeout')) {
+    return 'timeout'
+  }
+  if (msg.includes('cancelled') || msg.includes('canceled')) {
+    return 'user_cancelled'
+  }
   return 'unknown'
 }

@@ -6,7 +6,7 @@ import type {
   CreateRemoteTargetInput,
   UpdateRemoteTargetInput,
   DeleteRemoteTargetResult,
-} from '@shared/contracts/dto/remote'
+} from '../../../shared/contracts/dto/remote'
 
 const pendingDeletes = new Set<string>()
 
@@ -53,7 +53,9 @@ export function updateTarget(
   input: UpdateRemoteTargetInput,
 ): RemoteTarget | null {
   const existing = repo.findById(input.id)
-  if (!existing) {return null}
+  if (!existing) {
+    return null
+  }
 
   const updated: RemoteTarget = {
     ...existing,

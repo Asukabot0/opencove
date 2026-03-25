@@ -6,8 +6,8 @@ import type {
   TerminalSessionOpenOptions,
   TerminalSessionOpenResult,
   TerminalSessionAdapterStream,
-} from '@contexts/terminal/domain/TerminalSessionAdapter'
-import type { DisconnectReason } from '@contexts/remote/domain/types'
+} from '../../../contexts/terminal/domain/TerminalSessionAdapter'
+import type { DisconnectReason } from '../../../contexts/remote/domain/types'
 
 const MAX_SNAPSHOT_CHARS = 400_000
 const KEEPALIVE_INTERVAL_MS = 15_000
@@ -91,11 +91,15 @@ export class SshAdapter implements TerminalSessionAdapter {
 
             shellStream.on('data', (data: Buffer) => {
               const str = data.toString('utf8')
-              for (const cb of session.dataCallbacks) {cb(str)}
+              for (const cb of session.dataCallbacks) {
+                cb(str)
+              }
             })
 
             shellStream.on('close', () => {
-              for (const cb of session.exitCallbacks) {cb({ exitCode: null })}
+              for (const cb of session.exitCallbacks) {
+                cb({ exitCode: null })
+              }
               this.cleanupSession(sessionId)
             })
 
@@ -124,19 +128,25 @@ export class SshAdapter implements TerminalSessionAdapter {
 
   write(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId)
-    if (!session?.stream) {return}
+    if (!session?.stream) {
+      return
+    }
     session.stream.write(Buffer.from(data, 'utf8'))
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
     const session = this.sessions.get(sessionId)
-    if (!session?.stream) {return}
+    if (!session?.stream) {
+      return
+    }
     session.stream.setWindow(rows, cols, rows * 16, cols * 8)
   }
 
   kill(sessionId: string): void {
     const session = this.sessions.get(sessionId)
-    if (!session) {return}
+    if (!session) {
+      return
+    }
     if (session.stream) {
       session.stream.close()
     }
@@ -149,7 +159,9 @@ export class SshAdapter implements TerminalSessionAdapter {
 
   appendSnapshotData(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId)
-    if (!session) {return}
+    if (!session) {
+      return
+    }
     session.snapshot += data
     if (session.snapshot.length > MAX_SNAPSHOT_CHARS) {
       session.snapshot = session.snapshot.slice(-MAX_SNAPSHOT_CHARS)
@@ -245,24 +257,39 @@ export class SshAdapter implements TerminalSessionAdapter {
 
   private classifyError(err: Error & { level?: string }): DisconnectReason {
     const msg = err.message.toLowerCase()
-    if (msg.includes('authentication') || msg.includes('auth')) {return 'auth_failed'}
-    if (msg.includes('network') || msg.includes('econnrefused') || msg.includes('ehostunreach'))
-      {return 'network_unreachable'}
-    if (msg.includes('host key')) {return 'host_key_mismatch'}
-    if (msg.includes('timed out') || msg.includes('timeout')) {return 'timeout'}
-    if (msg.includes('cancelled') || msg.includes('canceled')) {return 'user_cancelled'}
+    if (msg.includes('authentication') || msg.includes('auth')) {
+      return 'auth_failed'
+    }
+    if (msg.includes('network') || msg.includes('econnrefused') || msg.includes('ehostunreach')) {
+      return 'network_unreachable'
+    }
+    if (msg.includes('host key')) {
+      return 'host_key_mismatch'
+    }
+    if (msg.includes('timed out') || msg.includes('timeout')) {
+      return 'timeout'
+    }
+    if (msg.includes('cancelled') || msg.includes('canceled')) {
+      return 'user_cancelled'
+    }
     return 'unknown'
   }
 
   private emitExit(sessionId: string, _reason: DisconnectReason): void {
     const session = this.sessions.get(sessionId)
-    if (!session) {return}
-    for (const cb of session.exitCallbacks) {cb({ exitCode: null })}
+    if (!session) {
+      return
+    }
+    for (const cb of session.exitCallbacks) {
+      cb({ exitCode: null })
+    }
   }
 
   private cleanupSession(sessionId: string): void {
     const session = this.sessions.get(sessionId)
-    if (!session) {return}
+    if (!session) {
+      return
+    }
     try {
       session.client.end()
     } catch {

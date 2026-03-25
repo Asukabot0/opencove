@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto'
 import type { RemoteTarget } from '../domain/RemoteTarget'
 import type { RemoteTargetRepository } from '../domain/RemoteTargetRepository'
 import { parseSshConfig, inferAuthMethod } from '../infrastructure/SshConfigParser'
-import type { ImportConflictStrategy, ImportSshConfigResult } from '@shared/contracts/dto/remote'
+import type {
+  ImportConflictStrategy,
+  ImportSshConfigResult,
+} from '../../../shared/contracts/dto/remote'
 
 export function importSshConfig(
   repo: RemoteTargetRepository,

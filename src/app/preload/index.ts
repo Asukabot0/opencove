@@ -252,6 +252,43 @@ const opencoveApi = {
     suggestTitle: (payload: SuggestTaskTitleInput): Promise<SuggestTaskTitleResult> =>
       invokeIpc(IPC_CHANNELS.taskSuggestTitle, payload),
   },
+  remote: {
+    listTargets: (workspaceId: string): Promise<unknown[]> =>
+      invokeIpc(IPC_CHANNELS.remoteListTargets, workspaceId),
+    getTarget: (id: string): Promise<unknown> => invokeIpc(IPC_CHANNELS.remoteGetTarget, id),
+    createTarget: (payload: unknown): Promise<unknown> =>
+      invokeIpc(IPC_CHANNELS.remoteCreateTarget, payload),
+    updateTarget: (payload: unknown): Promise<unknown> =>
+      invokeIpc(IPC_CHANNELS.remoteUpdateTarget, payload),
+    deleteTarget: (payload: unknown): Promise<unknown> =>
+      invokeIpc(IPC_CHANNELS.remoteDeleteTarget, payload),
+    importSshConfig: (payload: unknown): Promise<unknown> =>
+      invokeIpc(IPC_CHANNELS.remoteImportSshConfig, payload),
+  },
+  ssh: {
+    connect: (payload: unknown): Promise<unknown> => invokeIpc(IPC_CHANNELS.sshConnect, payload),
+    onCredentialRequest: (listener: (event: unknown) => void): UnsubscribeFn => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.sshCredentialRequest, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.sshCredentialRequest, handler)
+      }
+    },
+    sendCredentialResponse: (payload: unknown): void => {
+      ipcRenderer.send(IPC_CHANNELS.sshCredentialResponse, payload)
+    },
+    onConnectionState: (listener: (event: unknown) => void): UnsubscribeFn => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.ptySshConnectionState, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.ptySshConnectionState, handler)
+      }
+    },
+  },
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { remoteTargets } from '@platform/persistence/sqlite/schema'
+import { remoteTargets } from '../../../platform/persistence/sqlite/schema'
 import type { RemoteTarget } from '../domain/RemoteTarget'
 import type { RemoteTargetRepository } from '../domain/RemoteTargetRepository'
 import type { AuthMethod, RemoteTargetSource } from '../domain/types'

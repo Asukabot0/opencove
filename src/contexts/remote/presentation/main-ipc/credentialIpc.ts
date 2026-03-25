@@ -1,11 +1,14 @@
 import { ipcMain } from 'electron'
 import type { WebContents } from 'electron'
-import { IPC_CHANNELS } from '@shared/contracts/ipc/channels'
+import { IPC_CHANNELS } from '../../../../shared/contracts/ipc/channels'
 import type {
   SshCredentialRequestDto,
   SshCredentialResponseDto,
-} from '@shared/contracts/dto/remote'
-import type { CredentialResolver, SshCredentialRequest } from '@platform/process/ssh/SshAdapter'
+} from '../../../../shared/contracts/dto/remote'
+import type {
+  CredentialResolver,
+  SshCredentialRequest,
+} from '../../../../platform/process/ssh/SshAdapter'
 
 const CREDENTIAL_TIMEOUT_MS = 60_000
 
@@ -72,12 +75,18 @@ export function createWebContentsCredentialResolver(webContents: WebContents): C
  */
 export function registerCredentialResponseHandler(): void {
   ipcMain.on(IPC_CHANNELS.sshCredentialResponse, (_event, response: unknown) => {
-    if (!response || typeof response !== 'object') {return}
+    if (!response || typeof response !== 'object') {
+      return
+    }
     const dto = response as SshCredentialResponseDto
-    if (typeof dto.requestId !== 'string') {return}
+    if (typeof dto.requestId !== 'string') {
+      return
+    }
 
     const pending = pendingRequests.get(dto.requestId)
-    if (!pending) {return}
+    if (!pending) {
+      return
+    }
 
     pending.cleanup()
     pending.resolve(dto)
