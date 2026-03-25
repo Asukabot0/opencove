@@ -1,7 +1,9 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { remoteTargets } from '@platform/persistence/sqlite/schema'
-import type { RemoteTarget, RemoteTargetRepository } from '../domain/types'
+import type { RemoteTarget } from '../domain/RemoteTarget'
+import type { RemoteTargetRepository } from '../domain/RemoteTargetRepository'
+import type { AuthMethod, RemoteTargetSource } from '../domain/types'
 
 function rowToRemoteTarget(row: typeof remoteTargets.$inferSelect): RemoteTarget {
   return {
@@ -11,10 +13,10 @@ function rowToRemoteTarget(row: typeof remoteTargets.$inferSelect): RemoteTarget
     host: row.host,
     port: row.port,
     username: row.username,
-    authMethod: row.authMethod,
+    authMethod: row.authMethod as AuthMethod,
     keyPath: row.keyPath,
     forwardAgent: row.forwardAgent !== 0,
-    source: row.source,
+    source: row.source as RemoteTargetSource,
     importedFrom: row.importedFrom,
     secretRef: row.secretRef,
     connectTimeout: row.connectTimeout,
@@ -28,6 +30,15 @@ export class DrizzleRemoteTargetRepository implements RemoteTargetRepository {
 
   findById(id: string): RemoteTarget | null {
     const row = this.db.select().from(remoteTargets).where(eq(remoteTargets.id, id)).get()
+    return row ? rowToRemoteTarget(row) : null
+  }
+
+  findByHost(host: string, port: number): RemoteTarget | null {
+    const row = this.db
+      .select()
+      .from(remoteTargets)
+      .where(and(eq(remoteTargets.host, host), eq(remoteTargets.port, port)))
+      .get()
     return row ? rowToRemoteTarget(row) : null
   }
 

@@ -15,8 +15,14 @@ export interface TerminalSessionOpenOptions {
   args?: string[]
   env?: NodeJS.ProcessEnv
   shell?: string
-  // ssh-specific (Phase 1)
+  // ssh-specific
   targetId?: string
+  sshHost?: string
+  sshPort?: number
+  sshUsername?: string
+  sshAuthMethod?: string
+  sshKeyPath?: string
+  sshForwardAgent?: boolean
 }
 
 export interface TerminalSessionOpenResult {
