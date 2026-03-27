@@ -447,6 +447,7 @@ export const zhCN = {
     importResult: '已导入 {{imported}}，跳过 {{skipped}}，覆盖 {{overwritten}}',
     unsupportedDirectives: '不支持的指令：{{directives}}',
     noTargets: '未配置远程目标',
+    manageTargets: '管理目标...',
     connectionStatus: {
       connecting: '连接中...',
       connected: '已连接',

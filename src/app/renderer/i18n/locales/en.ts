@@ -412,6 +412,7 @@ export const en = {
     importResult: 'Imported {{imported}}, skipped {{skipped}}, overwritten {{overwritten}}',
     unsupportedDirectives: 'Unsupported directives: {{directives}}',
     noTargets: 'No remote targets configured',
+    manageTargets: 'Manage Targets...',
     connectionStatus: {
       connecting: 'Connecting...',
       connected: 'Connected',

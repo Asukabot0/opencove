@@ -25,12 +25,12 @@ export function useSshSessionNode(createNodeForSession: CreateNodeForSession): v
     }
 
     processingRef.current = true
-    const { sessionId, targetName } = pendingSshSession
+    const { sessionId, targetName, anchor } = pendingSshSession
 
     void createNodeForSession({
       sessionId,
       title: targetName,
-      anchor: { x: 100, y: 100 },
+      anchor: anchor ?? { x: 100, y: 100 },
       kind: 'terminal',
     }).finally(() => {
       setPendingSshSession(null)

@@ -18,6 +18,7 @@ export interface PendingSshSession {
   sessionId: string
   targetName: string
   targetId: string
+  anchor?: { x: number; y: number }
 }
 
 export interface AppStoreState {
