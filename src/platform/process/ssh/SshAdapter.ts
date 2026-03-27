@@ -47,6 +47,7 @@ interface SshSession {
   client: Client
   stream: ClientChannel | null
   snapshot: string
+  exited: boolean
   dataCallbacks: Array<(data: string) => void>
   exitCallbacks: Array<(exit: { exitCode: number | null }) => void>
 }
@@ -67,6 +68,7 @@ export class SshAdapter implements TerminalSessionAdapter {
       client,
       stream: null,
       snapshot: '',
+      exited: false,
       dataCallbacks: [],
       exitCallbacks: [],
     }
@@ -120,6 +122,10 @@ export class SshAdapter implements TerminalSessionAdapter {
             })
 
             shellStream.on('close', () => {
+              if (session.exited) {
+                return
+              }
+              session.exited = true
               for (const cb of session.exitCallbacks) {
                 cb({ exitCode: null })
               }
@@ -149,12 +155,12 @@ export class SshAdapter implements TerminalSessionAdapter {
     })
   }
 
-  write(sessionId: string, data: string): void {
+  write(sessionId: string, data: string, encoding?: 'utf8' | 'binary'): void {
     const session = this.sessions.get(sessionId)
     if (!session?.stream) {
       return
     }
-    session.stream.write(Buffer.from(data, 'utf8'))
+    session.stream.write(Buffer.from(data, encoding ?? 'utf8'))
   }
 
   resize(sessionId: string, cols: number, rows: number): void {
@@ -191,9 +197,22 @@ export class SshAdapter implements TerminalSessionAdapter {
     }
   }
 
-  delete(sessionId: string, _options?: { keepSnapshot?: boolean }): void {
-    this.kill(sessionId)
-    this.sessions.delete(sessionId)
+  delete(sessionId: string, options?: { keepSnapshot?: boolean }): void {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      return
+    }
+    if (session.stream) {
+      session.stream.close()
+    }
+    session.client.end()
+    if (options?.keepSnapshot) {
+      session.stream = null
+      session.dataCallbacks = []
+      session.exitCallbacks = []
+    } else {
+      this.sessions.delete(sessionId)
+    }
   }
 
   disposeAll(): void {
@@ -317,9 +336,10 @@ export class SshAdapter implements TerminalSessionAdapter {
 
   private emitExit(sessionId: string, _reason: DisconnectReason): void {
     const session = this.sessions.get(sessionId)
-    if (!session) {
+    if (!session || session.exited) {
       return
     }
+    session.exited = true
     for (const cb of session.exitCallbacks) {
       cb({ exitCode: null })
     }

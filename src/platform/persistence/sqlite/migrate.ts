@@ -102,6 +102,9 @@ function createTables(db: Database.Database): void {
       scrollback TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_remote_targets_workspace_id
+    ON remote_targets(workspace_id);
   `)
 }
 

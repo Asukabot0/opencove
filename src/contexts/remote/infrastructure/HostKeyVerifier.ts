@@ -29,7 +29,9 @@ function parseKnownHostsLines(path: string): string[] {
 function matchHashedHost(hashedEntry: string, host: string, port: number): boolean {
   // Format: |1|<base64-salt>|<base64-hash>
   const parts = hashedEntry.split('|')
-  if (parts.length !== 4 || parts[1] !== '1') {return false}
+  if (parts.length !== 4 || parts[1] !== '1') {
+    return false
+  }
 
   const salt = Buffer.from(parts[2]!, 'base64')
   const expectedHash = parts[3]!
@@ -64,10 +66,14 @@ export function verifyHostKey(
 
   for (const line of lines) {
     const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) {continue}
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue
+    }
 
     const parts = trimmed.split(/\s+/)
-    if (parts.length < 3) {continue}
+    if (parts.length < 3) {
+      continue
+    }
 
     const hostField = parts[0]!
     const entryKeyType = parts[1]!
@@ -78,9 +84,13 @@ export function verifyHostKey(
       ? matchHashedHost(hostField, host, port)
       : matchPlainHost(hostField, host, port)
 
-    if (!hostMatches) {continue}
+    if (!hostMatches) {
+      continue
+    }
 
-    if (entryKeyType !== keyType) {continue}
+    if (entryKeyType !== keyType) {
+      continue
+    }
 
     const existingFingerprint = fingerprintFromKeyData(entryKeyData)
     if (existingFingerprint === incomingFingerprint) {
@@ -100,6 +110,14 @@ export function addTrustedKey(
   keyData: string,
   knownHostsPath?: string,
 ): void {
+  for (const value of [host, keyType, keyData]) {
+    if (value.includes('\n') || value.includes('\r')) {
+      throw new Error('Invalid characters in host key data')
+    }
+  }
+  if (/\s/.test(host)) {
+    throw new Error('Host must not contain whitespace')
+  }
   const path = knownHostsPath ?? getKnownHostsPath()
   const dir = dirname(path)
 

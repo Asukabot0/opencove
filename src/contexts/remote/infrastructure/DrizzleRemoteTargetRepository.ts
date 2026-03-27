@@ -33,11 +33,17 @@ export class DrizzleRemoteTargetRepository implements RemoteTargetRepository {
     return row ? rowToRemoteTarget(row) : null
   }
 
-  findByHost(host: string, port: number): RemoteTarget | null {
+  findByHost(host: string, port: number, workspaceId: string): RemoteTarget | null {
     const row = this.db
       .select()
       .from(remoteTargets)
-      .where(and(eq(remoteTargets.host, host), eq(remoteTargets.port, port)))
+      .where(
+        and(
+          eq(remoteTargets.host, host),
+          eq(remoteTargets.port, port),
+          eq(remoteTargets.workspaceId, workspaceId),
+        ),
+      )
       .get()
     return row ? rowToRemoteTarget(row) : null
   }

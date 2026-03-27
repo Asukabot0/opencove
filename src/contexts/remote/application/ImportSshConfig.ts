@@ -20,7 +20,7 @@ export function importSshConfig(
   let overwritten = 0
 
   for (const host of hosts) {
-    const existing = repo.findByHost(host.hostName, host.port)
+    const existing = repo.findByHost(host.hostName, host.port, workspaceId)
 
     if (existing) {
       if (conflictStrategy === 'skip') {

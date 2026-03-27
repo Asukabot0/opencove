@@ -1,6 +1,5 @@
 import type { RemoteTargetRepository } from '../domain/RemoteTargetRepository'
 import type { DisconnectReason } from '../domain/types'
-import { isPendingDelete } from './ManageRemoteTargets'
 import type {
   SshConnectInput,
   SshConnectResult,
@@ -32,10 +31,6 @@ export async function connectSsh(
   const target = repo.findById(input.targetId)
   if (!target) {
     return { error: 'unknown' as DisconnectReason, message: 'Target not found' }
-  }
-
-  if (isPendingDelete(input.targetId)) {
-    return { error: 'user_cancelled' as DisconnectReason, message: 'Target is being deleted' }
   }
 
   try {

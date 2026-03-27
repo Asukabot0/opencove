@@ -52,10 +52,15 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     return await persistenceStorePromise
   }
 
-  // Remote target repository (reuses persistence store's shared db connection)
+  // Remote target repository (cached singleton, reuses persistence store's shared db connection)
+  let cachedRemoteTargetRepo: DrizzleRemoteTargetRepository | null = null
   const getRemoteTargetRepo = async () => {
+    if (cachedRemoteTargetRepo) {
+      return cachedRemoteTargetRepo
+    }
     const store = await getPersistenceStore()
-    return new DrizzleRemoteTargetRepository(store.drizzleDb)
+    cachedRemoteTargetRepo = new DrizzleRemoteTargetRepository(store.drizzleDb)
+    return cachedRemoteTargetRepo
   }
 
   if (process.env.NODE_ENV === 'test' && process.env.OPENCOVE_TEST_WORKSPACE) {
@@ -86,6 +91,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
         disposables[index]?.dispose()
       }
 
+      cachedRemoteTargetRepo = null
       const storePromise = persistenceStorePromise
       persistenceStorePromise = null
       storePromise

@@ -8,12 +8,6 @@ import type {
   DeleteRemoteTargetResult,
 } from '../../../shared/contracts/dto/remote'
 
-const pendingDeletes = new Set<string>()
-
-export function isPendingDelete(targetId: string): boolean {
-  return pendingDeletes.has(targetId)
-}
-
 export function listTargets(repo: RemoteTargetRepository, workspaceId: string): RemoteTarget[] {
   return repo.findByWorkspaceId(workspaceId)
 }
@@ -83,14 +77,9 @@ export function deleteTarget(
     return { deleted: false, hasActiveSessions: false, count: 0 }
   }
 
-  pendingDeletes.add(id)
-  try {
-    // TODO: query active sessions when TerminalSessionManager is wired
-    repo.delete(id)
-    return { deleted: true, hasActiveSessions: false, count: 0 }
-  } finally {
-    pendingDeletes.delete(id)
-  }
+  // TODO: query active sessions when TerminalSessionManager is wired
+  repo.delete(id)
+  return { deleted: true, hasActiveSessions: false, count: 0 }
 }
 
 export function deleteTargetsByWorkspaceId(
