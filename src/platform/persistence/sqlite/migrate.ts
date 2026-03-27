@@ -73,8 +73,30 @@ function createTables(db: Database.Database): void {
       rect_x REAL,
       rect_y REAL,
       rect_width REAL,
-      rect_height REAL
+      rect_height REAL,
+      target_id TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS remote_targets (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL DEFAULT 22,
+      username TEXT NOT NULL,
+      auth_method TEXT NOT NULL DEFAULT 'key',
+      key_path TEXT,
+      forward_agent INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'manual',
+      imported_from TEXT,
+      secret_ref TEXT,
+      connect_timeout INTEGER NOT NULL DEFAULT 10000,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_remote_targets_workspace_id
+    ON remote_targets(workspace_id);
 
     CREATE TABLE IF NOT EXISTS workspace_space_nodes (
       space_id TEXT NOT NULL,
@@ -170,6 +192,12 @@ function ensureCurrentSchema(db: Database.Database): void {
   ensureTableColumn(db, {
     tableName: 'workspace_spaces',
     columnName: 'label_color',
+    definitionSql: 'TEXT',
+  })
+
+  ensureTableColumn(db, {
+    tableName: 'workspace_spaces',
+    columnName: 'target_id',
     definitionSql: 'TEXT',
   })
 }

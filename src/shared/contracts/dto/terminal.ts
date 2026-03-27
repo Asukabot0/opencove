@@ -85,3 +85,5 @@ export interface TerminalSessionMetadataEvent {
   profileId?: string | null
   runtimeKind?: TerminalRuntimeKind
 }
+
+export type SessionKind = 'local' | 'ssh'

@@ -45,8 +45,13 @@ describe('Pty runtime session state watcher', () => {
       public dispose = vi.fn()
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
-      public onData(): void {}
-      public onExit(): void {}
+      public onData(): () => void {
+        return () => {}
+      }
+
+      public onExit(): () => void {
+        return () => {}
+      }
     }
 
     vi.doMock('electron', () => ({

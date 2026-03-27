@@ -1,4 +1,5 @@
 import { app, utilityProcess, webContents } from 'electron'
+import type { WebContents } from 'electron'
 import process from 'node:process'
 import { resolve } from 'node:path'
 import { IPC_CHANNELS } from '../../../../shared/contracts/ipc'
@@ -11,13 +12,23 @@ import type {
   TerminalDataEvent,
   TerminalWriteEncoding,
 } from '../../../../shared/contracts/dto'
-import { resolveDefaultShell } from '../../../../platform/process/pty/defaultShell'
+import type { SessionKind } from '../../../../shared/contracts/dto/terminal'
+import type { SshConnectionStateEvent } from '../../../../shared/contracts/dto/remote'
 import type { SpawnPtyOptions } from '../../../../platform/process/pty/types'
 import { PtyHostSupervisor } from '../../../../platform/process/ptyHost/supervisor'
+import { PtyHostAdapter } from '../../../../platform/process/ptyHost/PtyHostAdapter'
+import type {
+  CredentialResolver,
+  HostKeyVerifier,
+} from '../../../../platform/process/ssh/SshAdapter'
 import { TerminalProfileResolver } from '../../../../platform/terminal/TerminalProfileResolver'
 import type { GeminiSessionDiscoveryCursor } from '../../../agent/infrastructure/cli/AgentSessionLocatorProviders'
 import { createSessionStateWatcherController } from './sessionStateWatcher'
 import { TerminalSessionManager } from './sessionManager'
+import type {
+  TerminalSessionAdapter,
+  TerminalSessionOpenOptions,
+} from '../../domain/TerminalSessionAdapter'
 
 export interface StartSessionStateWatcherInput {
   sessionId: string
@@ -41,6 +52,10 @@ export interface PtyRuntime {
   detach: (contentsId: number, sessionId: string) => void
   snapshot: (sessionId: string) => string
   startSessionStateWatcher: (input: StartSessionStateWatcherInput) => void
+  openSshSession: (options: TerminalSessionOpenOptions) => Promise<{ sessionId: string }>
+  emitSshConnectionState: (event: SshConnectionStateEvent) => void
+  registerSshCredentialResolver: (targetId: string, webContents: WebContents) => void
+  unregisterSshCredentialResolver: (targetId: string) => void
   debugCrashHost?: () => void
   dispose: () => void
 }
@@ -98,6 +113,8 @@ export function createPtyRuntime(): PtyRuntime {
     return true
   }
 
+  // --- PtyHost + local adapter ---
+
   const logsDir = resolve(app.getPath('userData'), 'logs')
   const ptyHostLogFilePath = resolve(logsDir, 'pty-host.log')
   const ptyHost = new PtyHostSupervisor({
@@ -108,72 +125,62 @@ export function createPtyRuntime(): PtyRuntime {
       utilityProcess.fork(modulePath, [], { stdio: 'pipe', serviceName: 'OpenCove PTY Host' }),
   })
 
-  // --- Probe state (ptyHost-specific, not managed by SessionManager) ---
+  const localAdapter = new PtyHostAdapter(ptyHost)
 
-  const terminalProbeBufferBySession = new Map<string, string>()
+  // --- SSH credential resolver ---
 
-  const registerSessionProbeState = (sessionId: string): void => {
-    terminalProbeBufferBySession.set(sessionId, '')
+  const sshCredentialDispatch = new Map<string, WebContents>()
+
+  const sshCredentialResolver: CredentialResolver = async request => {
+    const { createWebContentsCredentialResolver } =
+      await import('../../../remote/presentation/main-ipc/credentialIpc')
+    const wc = sshCredentialDispatch.get(request.targetId)
+    if (!wc || wc.isDestroyed()) {
+      throw new Error('No WebContents available for credential request')
+    }
+    return createWebContentsCredentialResolver(wc)(request)
   }
 
-  const clearSessionProbeState = (sessionId: string): void => {
-    terminalProbeBufferBySession.delete(sessionId)
+  const sshHostKeyVerifier: HostKeyVerifier = async (host, port, keyType, keyData) => {
+    const { verifyHostKey, addTrustedKey } =
+      await import('../../../remote/infrastructure/HostKeyVerifier')
+    const result = verifyHostKey(host, port, keyType, keyData)
+    if (result.status === 'trusted') {
+      return true
+    }
+    if (result.status === 'mismatch') {
+      return false
+    }
+    addTrustedKey(host, port, keyType, keyData)
+    return true
   }
 
-  const resolveTerminalProbeReplies = (sessionId: string, outputChunk: string): void => {
-    if (outputChunk.includes('\u001b[6n')) {
-      ptyHost.write(sessionId, '\u001b[1;1R')
-    }
+  // --- Lazy SSH adapter ---
 
-    if (outputChunk.includes('\u001b[?6n')) {
-      ptyHost.write(sessionId, '\u001b[?1;1R')
+  let sshAdapterPromise: Promise<TerminalSessionAdapter> | null = null
+  const getSshAdapter = (): Promise<TerminalSessionAdapter> => {
+    if (!sshAdapterPromise) {
+      sshAdapterPromise = import('../../../../platform/process/ssh/SshAdapter').then(
+        ({ SshAdapter }) =>
+          new SshAdapter({
+            credentialResolver: sshCredentialResolver,
+            hostKeyVerifier: sshHostKeyVerifier,
+          }),
+      )
     }
-
-    if (outputChunk.includes('\u001b[c')) {
-      ptyHost.write(sessionId, '\u001b[?1;2c')
-    }
-
-    if (outputChunk.includes('\u001b[>c')) {
-      ptyHost.write(sessionId, '\u001b[>0;115;0c')
-    }
-
-    if (outputChunk.includes('\u001b[?u')) {
-      ptyHost.write(sessionId, '\u001b[?0u')
-    }
+    return sshAdapterPromise
   }
 
   // --- Session manager ---
 
+  const adapterRegistry = new Map<SessionKind, TerminalSessionAdapter>([['local', localAdapter]])
+
   const manager = new TerminalSessionManager({
+    adapterRegistry,
     sendToAllWindows,
     sendPtyDataToSubscriber,
     trackWebContentsDestroyed,
     sessionStateWatcher,
-    onProbeSubscriptionChanged(sessionId: string) {
-      if (manager.hasPtyDataSubscribers(sessionId)) {
-        terminalProbeBufferBySession.delete(sessionId)
-        return
-      }
-
-      terminalProbeBufferBySession.set(sessionId, '')
-    },
-  })
-
-  // --- PtyHost event wiring ---
-
-  ptyHost.onData(({ sessionId, data }) => {
-    if (!manager.hasPtyDataSubscribers(sessionId)) {
-      const probeBuffer = `${terminalProbeBufferBySession.get(sessionId) ?? ''}${data}`
-      resolveTerminalProbeReplies(sessionId, probeBuffer)
-      terminalProbeBufferBySession.set(sessionId, probeBuffer.slice(-32))
-    }
-
-    manager.handleData(sessionId, data)
-  })
-
-  ptyHost.onExit(({ sessionId, exitCode }) => {
-    manager.handleExit(sessionId, exitCode)
-    clearSessionProbeState(sessionId)
   })
 
   // --- PtyRuntime interface ---
@@ -182,7 +189,8 @@ export function createPtyRuntime(): PtyRuntime {
     listProfiles: async () => await profileResolver.listProfiles(),
     spawnTerminalSession: async input => {
       const resolved = await profileResolver.resolveTerminalSpawn(input)
-      const { sessionId } = await ptyHost.spawn({
+      const result = manager.open('local', {
+        sessionKind: 'local',
         cwd: resolved.cwd,
         command: resolved.command,
         args: resolved.args,
@@ -190,44 +198,36 @@ export function createPtyRuntime(): PtyRuntime {
         cols: input.cols,
         rows: input.rows,
       })
-
-      manager.registerSession(sessionId)
-      registerSessionProbeState(sessionId)
+      const opened = result instanceof Promise ? await result : result
 
       return {
-        sessionId,
+        sessionId: opened.sessionId,
         profileId: resolved.profileId,
         runtimeKind: resolved.runtimeKind,
       }
     },
     spawnSession: async options => {
-      const command = options.command ?? options.shell ?? resolveDefaultShell()
-      const args = options.command ? (options.args ?? []) : []
-
-      const { sessionId } = await ptyHost.spawn({
+      const result = manager.open('local', {
+        sessionKind: 'local',
         cwd: options.cwd,
-        command,
-        args,
+        command: options.command,
+        args: options.args,
         env: options.env,
+        shell: options.shell,
         cols: options.cols,
         rows: options.rows,
       })
-
-      manager.registerSession(sessionId)
-      registerSessionProbeState(sessionId)
-      return { sessionId }
+      const opened = result instanceof Promise ? await result : result
+      return { sessionId: opened.sessionId }
     },
     write: (sessionId, data, encoding = 'utf8') => {
-      ptyHost.write(sessionId, data, encoding)
-      sessionStateWatcher.noteInteraction(sessionId, data)
+      manager.write(sessionId, data, encoding)
     },
     resize: (sessionId, cols, rows) => {
-      ptyHost.resize(sessionId, cols, rows)
+      manager.resize(sessionId, cols, rows)
     },
     kill: sessionId => {
       manager.kill(sessionId)
-      clearSessionProbeState(sessionId)
-      ptyHost.kill(sessionId)
     },
     attach: (contentsId, sessionId) => {
       manager.attach(contentsId, sessionId)
@@ -257,6 +257,23 @@ export function createPtyRuntime(): PtyRuntime {
         opencodeBaseUrl,
       })
     },
+    openSshSession: async options => {
+      if (!adapterRegistry.has('ssh')) {
+        adapterRegistry.set('ssh', await getSshAdapter())
+      }
+      const result = manager.open('ssh', options)
+      const opened = result instanceof Promise ? await result : result
+      return { sessionId: opened.sessionId }
+    },
+    emitSshConnectionState: event => {
+      sendToAllWindows(IPC_CHANNELS.ptySshConnectionState, event)
+    },
+    registerSshCredentialResolver: (targetId, wc) => {
+      sshCredentialDispatch.set(targetId, wc)
+    },
+    unregisterSshCredentialResolver: targetId => {
+      sshCredentialDispatch.delete(targetId)
+    },
     ...(process.env.NODE_ENV === 'test'
       ? {
           debugCrashHost: () => {
@@ -266,8 +283,6 @@ export function createPtyRuntime(): PtyRuntime {
       : {}),
     dispose: () => {
       manager.dispose()
-      terminalProbeBufferBySession.clear()
-      ptyHost.dispose()
     },
   }
 }

@@ -22,8 +22,13 @@ describe('Pty runtime provider watchers', () => {
       public dispose = vi.fn()
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
-      public onData(): void {}
-      public onExit(): void {}
+      public onData(): () => void {
+        return () => {}
+      }
+
+      public onExit(): () => void {
+        return () => {}
+      }
     }
 
     const fetchMock = vi
@@ -169,8 +174,13 @@ describe('Pty runtime provider watchers', () => {
       public dispose = vi.fn()
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
-      public onData(): void {}
-      public onExit(): void {}
+      public onData(): () => void {
+        return () => {}
+      }
+
+      public onExit(): () => void {
+        return () => {}
+      }
     }
 
     vi.doMock('electron', () => ({

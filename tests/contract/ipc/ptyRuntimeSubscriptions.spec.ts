@@ -28,12 +28,14 @@ describe('Pty runtime subscriptions', () => {
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
 
-      public onData(handler: PtyDataHandler): void {
+      public onData(handler: PtyDataHandler): () => void {
         onDataHandler = handler
+        return () => {}
       }
 
-      public onExit(handler: PtyExitHandler): void {
+      public onExit(handler: PtyExitHandler): () => void {
         onExitHandler = handler
+        return () => {}
       }
     }
 
@@ -59,7 +61,6 @@ describe('Pty runtime subscriptions', () => {
 
     const runtime = createPtyRuntime()
     expect(onDataHandler).not.toBeNull()
-    expect(onExitHandler).not.toBeNull()
 
     const { sessionId } = await runtime.spawnSession({ cwd: '/tmp', cols: 80, rows: 24 })
     runtime.attach(1, sessionId)
@@ -111,11 +112,14 @@ describe('Pty runtime subscriptions', () => {
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
 
-      public onData(handler: PtyDataHandler): void {
+      public onData(handler: PtyDataHandler): () => void {
         onDataHandler = handler
+        return () => {}
       }
 
-      public onExit(_handler: PtyExitHandler): void {}
+      public onExit(_handler: PtyExitHandler): () => void {
+        return () => {}
+      }
     }
 
     vi.doMock('electron', () => ({
@@ -187,11 +191,14 @@ describe('Pty runtime subscriptions', () => {
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
 
-      public onData(handler: PtyDataHandler): void {
+      public onData(handler: PtyDataHandler): () => void {
         onDataHandler = handler
+        return () => {}
       }
 
-      public onExit(_handler: PtyExitHandler): void {}
+      public onExit(_handler: PtyExitHandler): () => void {
+        return () => {}
+      }
     }
 
     vi.doMock('electron', () => ({
@@ -262,11 +269,14 @@ describe('Pty runtime subscriptions', () => {
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
 
-      public onData(handler: PtyDataHandler): void {
+      public onData(handler: PtyDataHandler): () => void {
         onDataHandler = handler
+        return () => {}
       }
 
-      public onExit(_handler: PtyExitHandler): void {}
+      public onExit(_handler: PtyExitHandler): () => void {
+        return () => {}
+      }
     }
 
     vi.doMock('electron', () => ({
@@ -330,11 +340,14 @@ describe('Pty runtime subscriptions', () => {
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
 
-      public onData(handler: PtyDataHandler): void {
+      public onData(handler: PtyDataHandler): () => void {
         onDataHandler = handler
+        return () => {}
       }
 
-      public onExit(_handler: PtyExitHandler): void {}
+      public onExit(_handler: PtyExitHandler): () => void {
+        return () => {}
+      }
     }
 
     vi.doMock('electron', () => ({
@@ -390,11 +403,14 @@ describe('Pty runtime subscriptions', () => {
       public crash = vi.fn()
       public spawn = vi.fn(async () => ({ sessionId: 'session-1' }))
 
-      public onData(handler: PtyDataHandler): void {
+      public onData(handler: PtyDataHandler): () => void {
         onDataHandler = handler
+        return () => {}
       }
 
-      public onExit(_handler: PtyExitHandler): void {}
+      public onExit(_handler: PtyExitHandler): () => void {
+        return () => {}
+      }
     }
 
     vi.doMock('electron', () => ({

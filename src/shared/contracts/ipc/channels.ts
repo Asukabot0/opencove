@@ -52,6 +52,16 @@ export const IPC_CHANNELS = {
   agentResolveResumeSession: 'agent:resolve-resume-session',
   agentReadLastMessage: 'agent:read-last-message',
   taskSuggestTitle: 'task:suggest-title',
+  remoteListTargets: 'remote:list-targets',
+  remoteGetTarget: 'remote:get-target',
+  remoteCreateTarget: 'remote:create-target',
+  remoteUpdateTarget: 'remote:update-target',
+  remoteDeleteTarget: 'remote:delete-target',
+  remoteImportSshConfig: 'remote:import-ssh-config',
+  sshConnect: 'ssh:connect',
+  sshCredentialRequest: 'ssh:credential-request',
+  sshCredentialResponse: 'ssh:credential-response',
+  ptySshConnectionState: 'pty:ssh-connection-state',
 } as const
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS]
