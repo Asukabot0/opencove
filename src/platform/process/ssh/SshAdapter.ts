@@ -83,71 +83,52 @@ export class SshAdapter implements TerminalSessionAdapter {
 
     const connectConfig = await this.buildConnectConfig(options)
 
-    // Capture the server's host key during SSH handshake for post-ready verification
-    let capturedHostKey: Buffer | null = null
-    connectConfig.hostVerifier = (key: Buffer) => {
-      capturedHostKey = key
-      return true // Accept tentatively; actual verification happens after 'ready'
+    // Verify host key during the SSH handshake (before authentication).
+    // ssh2 supports an async callback form: (key, verify) => void
+    connectConfig.hostVerifier = (key: Buffer, verify: (valid: boolean) => void) => {
+      try {
+        const keyTypeLen = key.readUInt32BE(0)
+        const keyType = key.subarray(4, 4 + keyTypeLen).toString('ascii')
+        const keyData = key.toString('base64')
+        this.deps
+          .hostKeyVerifier(options.sshHost!, options.sshPort ?? 22, keyType, keyData)
+          .then(valid => verify(valid))
+          .catch(() => verify(false))
+      } catch {
+        verify(false)
+      }
     }
 
     return new Promise<TerminalSessionOpenResult>((resolve, reject) => {
       client.on('ready', () => {
-        const verifyAndOpenShell = async () => {
-          // Verify captured host key before opening shell
-          if (capturedHostKey) {
-            try {
-              const keyTypeLen = capturedHostKey.readUInt32BE(0)
-              const keyType = capturedHostKey.subarray(4, 4 + keyTypeLen).toString('ascii')
-              const keyData = capturedHostKey.toString('base64')
-              const verified = await this.deps.hostKeyVerifier(
-                options.sshHost!,
-                options.sshPort ?? 22,
-                keyType,
-                keyData,
-              )
-              if (!verified) {
-                client.end()
-                reject(new Error('Host key verification rejected'))
-                return
-              }
-            } catch (err) {
-              client.end()
-              reject(err instanceof Error ? err : new Error(String(err)))
+        client.shell(
+          { term: 'xterm-256color', cols: options.cols, rows: options.rows },
+          (err, shellStream) => {
+            if (err) {
+              this.cleanupSession(sessionId)
+              reject(err)
               return
             }
-          }
 
-          client.shell(
-            { term: 'xterm-256color', cols: options.cols, rows: options.rows },
-            (err, shellStream) => {
-              if (err) {
-                this.cleanupSession(sessionId)
-                reject(err)
-                return
+            session.stream = shellStream
+
+            shellStream.on('data', (data: Buffer) => {
+              const str = data.toString('utf8')
+              for (const cb of session.dataCallbacks) {
+                cb(str)
               }
+            })
 
-              session.stream = shellStream
+            shellStream.on('close', () => {
+              for (const cb of session.exitCallbacks) {
+                cb({ exitCode: null })
+              }
+              this.cleanupSession(sessionId)
+            })
 
-              shellStream.on('data', (data: Buffer) => {
-                const str = data.toString('utf8')
-                for (const cb of session.dataCallbacks) {
-                  cb(str)
-                }
-              })
-
-              shellStream.on('close', () => {
-                for (const cb of session.exitCallbacks) {
-                  cb({ exitCode: null })
-                }
-                this.cleanupSession(sessionId)
-              })
-
-              resolve({ sessionId, stream })
-            },
-          )
-        }
-
-        void verifyAndOpenShell()
+            resolve({ sessionId, stream })
+          },
+        )
       })
 
       client.on('error', err => {
@@ -240,7 +221,12 @@ export class SshAdapter implements TerminalSessionAdapter {
       config.agent = process.env.SSH_AUTH_SOCK
     } else if (options.sshAuthMethod === 'key' && options.sshKeyPath) {
       const { readFileSync } = await import('node:fs')
-      const keyData = readFileSync(options.sshKeyPath, 'utf8')
+      const { homedir } = await import('node:os')
+      const { join } = await import('node:path')
+      const resolvedKeyPath = options.sshKeyPath.startsWith('~/')
+        ? join(homedir(), options.sshKeyPath.slice(2))
+        : options.sshKeyPath
+      const keyData = readFileSync(resolvedKeyPath, 'utf8')
       config.privateKey = keyData
 
       if (this.keyNeedsPassphrase(keyData)) {

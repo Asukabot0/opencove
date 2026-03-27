@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from '@app/renderer/i18n'
-import type { RemoteTargetDto, CreateRemoteTargetInput } from '@shared/contracts/dto/remote'
+import { useAppStore } from '@app/renderer/shell/store/useAppStore'
+import type {
+  RemoteTargetDto,
+  CreateRemoteTargetInput,
+  SshConnectResult,
+  SshConnectError,
+} from '@shared/contracts/dto/remote'
+
+type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
 interface RemoteTargetManagerProps {
   workspaceId: string
@@ -10,6 +18,11 @@ export function RemoteTargetManager({ workspaceId }: RemoteTargetManagerProps) {
   const { t } = useTranslation()
   const [targets, setTargets] = useState<RemoteTargetDto[]>([])
   const [showForm, setShowForm] = useState(false)
+  const [connectionStates, setConnectionStates] = useState<Map<string, ConnectionStatus>>(new Map())
+  const [connectionErrors, setConnectionErrors] = useState<Map<string, string>>(new Map())
+  const [importError, setImportError] = useState<string | null>(null)
+  const [importMessage, setImportMessage] = useState<string | null>(null)
+  const { setPendingSshSession, setIsSettingsOpen } = useAppStore()
 
   const loadTargets = useCallback(async () => {
     const result = (await window.opencoveApi.remote.listTargets(workspaceId)) as RemoteTargetDto[]
@@ -38,63 +51,155 @@ export function RemoteTargetManager({ workspaceId }: RemoteTargetManagerProps) {
   )
 
   const handleImport = useCallback(async () => {
-    await window.opencoveApi.remote.importSshConfig({ workspaceId })
-    await loadTargets()
-  }, [workspaceId, loadTargets])
+    setImportError(null)
+    setImportMessage(null)
+    try {
+      const result = await window.opencoveApi.remote.importSshConfig({ workspaceId })
+      const res = result as {
+        imported?: number
+        skipped?: number
+        overwritten?: number
+        error?: string
+        message?: string
+      }
+      if (res.error) {
+        setImportError(res.message ?? res.error)
+      } else {
+        await loadTargets()
+        const imported = res.imported ?? 0
+        const skipped = res.skipped ?? 0
+        const overwritten = res.overwritten ?? 0
+        if (imported === 0 && skipped === 0 && overwritten === 0) {
+          setImportMessage(t('remote.noTargets') + ' (~/.ssh/config)')
+        } else {
+          setImportMessage(t('remote.importResult', { imported, skipped, overwritten }))
+        }
+      }
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err))
+    }
+  }, [workspaceId, loadTargets, t])
+
+  const handleConnect = useCallback(
+    async (target: RemoteTargetDto) => {
+      setConnectionStates(prev => new Map(prev).set(target.id, 'connecting'))
+      setConnectionErrors(prev => {
+        const next = new Map(prev)
+        next.delete(target.id)
+        return next
+      })
+
+      try {
+        const result = await window.opencoveApi.ssh.connect({
+          targetId: target.id,
+          cols: 80,
+          rows: 24,
+        })
+
+        if ('sessionId' in (result as SshConnectResult)) {
+          setConnectionStates(prev => new Map(prev).set(target.id, 'connected'))
+          setPendingSshSession({
+            sessionId: (result as SshConnectResult).sessionId,
+            targetName: target.name,
+            targetId: target.id,
+          })
+          setIsSettingsOpen(false)
+        } else {
+          const err = result as SshConnectError
+          setConnectionStates(prev => new Map(prev).set(target.id, 'error'))
+          setConnectionErrors(prev => new Map(prev).set(target.id, err.message))
+        }
+      } catch (err) {
+        setConnectionStates(prev => new Map(prev).set(target.id, 'error'))
+        setConnectionErrors(prev =>
+          new Map(prev).set(target.id, err instanceof Error ? err.message : String(err)),
+        )
+      }
+    },
+    [setPendingSshSession, setIsSettingsOpen],
+  )
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-neutral-200">{t('remote.title')}</h3>
-        <div className="flex gap-1.5">
-          <button
-            onClick={handleImport}
-            className="rounded px-2 py-0.5 text-xs text-neutral-400 hover:bg-neutral-700 hover:text-neutral-200"
-          >
+    <div className="settings-panel__section" id="settings-section-remote">
+      <h3 className="settings-panel__section-title">{t('remote.title')}</h3>
+
+      <div className="settings-panel__subsection">
+        <div className="settings-panel__subsection-header">
+          <strong>{t('remote.title')}</strong>
+          <span>{t('remote.noTargets')}</span>
+        </div>
+
+        <div className="settings-list-container" data-testid="remote-targets-list">
+          {targets.map(target => {
+            const status = connectionStates.get(target.id) ?? 'idle'
+            const error = connectionErrors.get(target.id)
+            return (
+              <div key={target.id}>
+                <div className="settings-list-item">
+                  <span className="settings-panel__value">
+                    {target.name}
+                    <span style={{ marginLeft: 8, opacity: 0.5 }}>
+                      {target.username}@{target.host}:{target.port}
+                    </span>
+                  </span>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="primary"
+                      style={{ padding: '4px 12px', fontSize: '12px' }}
+                      disabled={status === 'connecting'}
+                      onClick={() => handleConnect(target)}
+                    >
+                      {status === 'connecting'
+                        ? t('remote.connectionStatus.connecting')
+                        : status === 'connected'
+                          ? t('remote.connectionStatus.connected')
+                          : t('remote.connect')}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ padding: '2px 8px', fontSize: '11px' }}
+                      onClick={() => handleDelete(target.id)}
+                    >
+                      {t('remote.deleteTarget')}
+                    </button>
+                  </div>
+                </div>
+                {status === 'error' && error ? (
+                  <p style={{ padding: '4px 12px', fontSize: '12px', color: 'var(--cove-error)' }}>
+                    {error}
+                  </p>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+
+        {importError ? (
+          <p style={{ fontSize: '12px', color: 'var(--cove-error)' }}>{importError}</p>
+        ) : null}
+        {importMessage ? (
+          <p style={{ fontSize: '12px', color: 'var(--cove-text-muted)' }}>{importMessage}</p>
+        ) : null}
+
+        <div className="settings-panel__input-row">
+          <button type="button" className="secondary" onClick={handleImport}>
             {t('remote.importSshConfig')}
           </button>
-          <button
-            onClick={() => setShowForm(true)}
-            className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white hover:bg-blue-500"
-          >
+          <button type="button" className="primary" onClick={() => setShowForm(true)}>
             {t('remote.addTarget')}
           </button>
         </div>
       </div>
 
-      {targets.length === 0 && !showForm && (
-        <p className="text-xs text-neutral-500">{t('remote.noTargets')}</p>
-      )}
-
-      {showForm && (
+      {showForm ? (
         <RemoteTargetForm
           workspaceId={workspaceId}
           onSave={handleCreate}
           onCancel={() => setShowForm(false)}
         />
-      )}
-
-      <div className="space-y-1">
-        {targets.map(target => (
-          <div
-            key={target.id}
-            className="flex items-center justify-between rounded bg-neutral-800 px-3 py-2"
-          >
-            <div>
-              <span className="text-sm text-neutral-200">{target.name}</span>
-              <span className="ml-2 text-xs text-neutral-500">
-                {target.username}@{target.host}:{target.port}
-              </span>
-            </div>
-            <button
-              onClick={() => handleDelete(target.id)}
-              className="text-xs text-neutral-500 hover:text-red-400"
-            >
-              {t('remote.deleteTarget')}
-            </button>
-          </div>
-        ))}
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -115,7 +220,9 @@ function RemoteTargetForm({
   const [username, setUsername] = useState('')
 
   const handleSubmit = useCallback(() => {
-    if (!name.trim() || !host.trim() || !username.trim()) {return}
+    if (!name.trim() || !host.trim() || !username.trim()) {
+      return
+    }
     onSave({
       workspaceId,
       name: name.trim(),
@@ -126,44 +233,71 @@ function RemoteTargetForm({
   }, [workspaceId, name, host, port, username, onSave])
 
   return (
-    <div className="space-y-2 rounded border border-neutral-700 bg-neutral-800/50 p-3">
-      <input
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder={t('remote.name')}
-        className="w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 outline-none focus:border-blue-500"
-      />
-      <div className="flex gap-2">
-        <input
-          value={host}
-          onChange={e => setHost(e.target.value)}
-          placeholder={t('remote.host')}
-          className="flex-1 rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 outline-none focus:border-blue-500"
-        />
-        <input
-          value={port}
-          onChange={e => setPort(e.target.value)}
-          placeholder={t('remote.port')}
-          className="w-20 rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 outline-none focus:border-blue-500"
-        />
+    <div className="settings-panel__subsection">
+      <div className="settings-panel__subsection-header">
+        <strong>{t('remote.addTarget')}</strong>
       </div>
-      <input
-        value={username}
-        onChange={e => setUsername(e.target.value)}
-        placeholder={t('remote.username')}
-        className="w-full rounded border border-neutral-600 bg-neutral-900 px-2 py-1 text-sm text-neutral-100 outline-none focus:border-blue-500"
-      />
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={onCancel}
-          className="rounded px-3 py-1 text-xs text-neutral-400 hover:text-neutral-200"
-        >
+
+      <div className="settings-panel__row">
+        <div className="settings-panel__row-label">
+          <strong>{t('remote.name')}</strong>
+        </div>
+        <div className="settings-panel__control">
+          <input
+            type="text"
+            className="cove-field"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder={t('remote.name')}
+          />
+        </div>
+      </div>
+
+      <div className="settings-panel__row">
+        <div className="settings-panel__row-label">
+          <strong>{t('remote.host')}</strong>
+        </div>
+        <div className="settings-panel__control">
+          <div className="settings-panel__input-row">
+            <input
+              type="text"
+              className="cove-field"
+              value={host}
+              onChange={e => setHost(e.target.value)}
+              placeholder={t('remote.host')}
+            />
+            <input
+              type="text"
+              className="cove-field"
+              style={{ maxWidth: 80 }}
+              value={port}
+              onChange={e => setPort(e.target.value)}
+              placeholder={t('remote.port')}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-panel__row">
+        <div className="settings-panel__row-label">
+          <strong>{t('remote.username')}</strong>
+        </div>
+        <div className="settings-panel__control">
+          <input
+            type="text"
+            className="cove-field"
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            placeholder={t('remote.username')}
+          />
+        </div>
+      </div>
+
+      <div className="settings-panel__input-row">
+        <button type="button" className="secondary" onClick={onCancel}>
           {t('remote.cancel')}
         </button>
-        <button
-          onClick={handleSubmit}
-          className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-500"
-        >
+        <button type="button" className="primary" onClick={handleSubmit}>
           {t('remote.save')}
         </button>
       </div>

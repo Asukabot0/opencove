@@ -8,6 +8,7 @@ export const zhCNSettingsPanel = {
     tasks: '任务',
     models: '模型',
     integrations: '集成',
+    remote: '远程',
     projects: '项目',
     sectionsLabel: '设置分区',
   },

@@ -4,6 +4,10 @@ import { normalizePersistedAppState } from './normalize'
 import { safeJsonParse } from './utils'
 import { writeNormalizedAppState, writeNormalizedScrollbacks } from './write'
 
+function isDuplicateColumnError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('duplicate column name')
+}
+
 function createTables(db: Database.Database): void {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -153,8 +157,10 @@ export function migrate(db: Database.Database): void {
         ALTER TABLE workspaces
         ADD COLUMN pull_request_base_branch_options_json TEXT NOT NULL DEFAULT '[]'
       `)
-    } catch {
-      // ignore (column already exists)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
     }
 
     db.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
@@ -169,8 +175,10 @@ export function migrate(db: Database.Database): void {
         ALTER TABLE nodes
         ADD COLUMN label_color_override TEXT
       `)
-    } catch {
-      // ignore (column already exists)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
     }
 
     try {
@@ -178,8 +186,10 @@ export function migrate(db: Database.Database): void {
         ALTER TABLE workspace_spaces
         ADD COLUMN label_color TEXT
       `)
-    } catch {
-      // ignore (column already exists)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
     }
 
     db.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
@@ -194,8 +204,10 @@ export function migrate(db: Database.Database): void {
         ALTER TABLE workspace_spaces
         ADD COLUMN target_id TEXT
       `)
-    } catch {
-      // ignore (column already exists)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
     }
 
     db.pragma(`user_version = ${DB_SCHEMA_VERSION}`)

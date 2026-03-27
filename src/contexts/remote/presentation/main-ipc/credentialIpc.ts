@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import type { WebContents } from 'electron'
 import { IPC_CHANNELS } from '../../../../shared/contracts/ipc/channels'
+import type { IpcRegistrationDisposable } from '../../../../app/main/ipc/types'
 import type {
   SshCredentialRequestDto,
   SshCredentialResponseDto,
@@ -81,8 +82,8 @@ export function createWebContentsCredentialResolver(webContents: WebContents): C
  * Register the global credential response listener.
  * Must be called once during app startup.
  */
-export function registerCredentialResponseHandler(): void {
-  ipcMain.on(IPC_CHANNELS.sshCredentialResponse, (event, response: unknown) => {
+export function registerCredentialResponseHandler(): IpcRegistrationDisposable {
+  const handler = (event: Electron.IpcMainEvent, response: unknown) => {
     if (!response || typeof response !== 'object') {
       return
     }
@@ -103,5 +104,19 @@ export function registerCredentialResponseHandler(): void {
 
     pending.cleanup()
     pending.resolve(dto)
-  })
+  }
+
+  ipcMain.on(IPC_CHANNELS.sshCredentialResponse, handler)
+
+  return {
+    dispose: () => {
+      ipcMain.removeListener(IPC_CHANNELS.sshCredentialResponse, handler)
+      // Reject all pending requests on dispose
+      for (const [, pending] of pendingRequests) {
+        pending.cleanup()
+        pending.reject(new Error('Credential handler disposed'))
+      }
+      pendingRequests.clear()
+    },
+  }
 }

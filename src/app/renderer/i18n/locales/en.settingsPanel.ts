@@ -8,6 +8,7 @@ export const enSettingsPanel = {
     tasks: 'Tasks',
     models: 'Models',
     integrations: 'Integrations',
+    remote: 'Remote',
     projects: 'Projects',
     sectionsLabel: 'Settings sections',
   },

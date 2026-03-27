@@ -36,6 +36,7 @@ describe('registerIpcHandlers', () => {
       handle: vi.fn(),
       removeHandler: vi.fn(),
       on: vi.fn(),
+      removeListener: vi.fn(),
     }
 
     const clipboard = {

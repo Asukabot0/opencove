@@ -19,7 +19,10 @@ import { createPersistenceStore } from '../../../platform/persistence/sqlite/Per
 import { registerPersistenceIpcHandlers } from '../../../platform/persistence/sqlite/ipc/register'
 import { registerWindowChromeIpcHandlers } from './registerWindowChromeIpcHandlers'
 import { registerWindowMetricsIpcHandlers } from './registerWindowMetricsIpcHandlers'
-import { registerRemoteIpcHandlers } from '../../../contexts/remote/presentation/main-ipc/register'
+import {
+  registerRemoteIpcHandlers,
+  registerSshConnectHandler,
+} from '../../../contexts/remote/presentation/main-ipc/register'
 import { registerCredentialResponseHandler } from '../../../contexts/remote/presentation/main-ipc/credentialIpc'
 import { DrizzleRemoteTargetRepository } from '../../../contexts/remote/infrastructure/DrizzleRemoteTargetRepository'
 
@@ -55,15 +58,14 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     return new DrizzleRemoteTargetRepository(store.drizzleDb)
   }
 
-  // Register remote IPC + credential response handler
-  registerRemoteIpcHandlers(getRemoteTargetRepo)
-  registerCredentialResponseHandler()
-
   if (process.env.NODE_ENV === 'test' && process.env.OPENCOVE_TEST_WORKSPACE) {
     void approvedWorkspaces.registerRoot(resolve(process.env.OPENCOVE_TEST_WORKSPACE))
   }
 
   const disposables: IpcRegistrationDisposable[] = [
+    registerRemoteIpcHandlers(getRemoteTargetRepo),
+    registerSshConnectHandler(getRemoteTargetRepo, ptyRuntime),
+    registerCredentialResponseHandler(),
     registerClipboardIpcHandlers(),
     registerAppUpdateIpcHandlers(appUpdateService),
     registerReleaseNotesIpcHandlers(releaseNotesService),

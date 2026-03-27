@@ -18,6 +18,7 @@ import {
   WorkspaceContextPaneMenuContent,
   WorkspaceContextSelectionMenuContent,
 } from './WorkspaceContextMenuParts'
+import { useAppStore } from '@app/renderer/shell/store/useAppStore'
 import {
   MENU_WIDTH,
   SUBMENU_CLOSE_DELAY_MS,
@@ -445,6 +446,10 @@ export function WorkspaceContextMenu({
         {contextMenu.kind === 'pane' ? (
           <WorkspaceContextPaneMenuContent
             createTerminalNode={createTerminalNode}
+            openRemoteSettings={() => {
+              useAppStore.getState().setIsSettingsOpen(true)
+              closeContextMenu()
+            }}
             createNoteNodeFromContextMenu={createNoteNodeFromContextMenu}
             openTaskCreator={openTaskCreator}
             openAgentLauncher={openAgentLauncher}

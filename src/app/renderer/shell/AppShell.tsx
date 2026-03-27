@@ -31,6 +31,7 @@ import { useAppStore } from './store/useAppStore'
 import { createDefaultWorkspaceViewport } from '@contexts/workspace/presentation/renderer/utils/workspaceSpaces'
 import { removeWorkspace } from './utils/removeWorkspace'
 import { WhatsNewDialog } from './components/WhatsNewDialog'
+import { SshCredentialDialog } from '@contexts/remote/presentation/renderer/components/SshCredentialDialog'
 import { formatKeyChord, resolveCommandKeybinding } from '@contexts/settings/domain/keybindings'
 
 export default function App(): React.JSX.Element {
@@ -439,6 +440,7 @@ export default function App(): React.JSX.Element {
           updateState={updateState}
           modelCatalogByProvider={providerModelCatalog}
           workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
           onWorkspaceWorktreesRootChange={(id, root) => {
             handleAnyWorkspaceWorktreesRootChange(id, root)
           }}
@@ -476,6 +478,8 @@ export default function App(): React.JSX.Element {
           whatsNew.close()
         }}
       />
+
+      <SshCredentialDialog />
     </>
   )
 }

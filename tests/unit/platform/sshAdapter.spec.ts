@@ -6,19 +6,19 @@ import type {
 } from '../../../src/platform/process/ssh/SshAdapter'
 
 const { mockShellStream, mockClient } = vi.hoisted(() => {
-  const mockShellStream = {
+  const stream = {
     on: vi.fn(),
     write: vi.fn(),
     close: vi.fn(),
     setWindow: vi.fn(),
   }
-  const mockClient = {
+  const client = {
     on: vi.fn(),
     connect: vi.fn(),
     shell: vi.fn(),
     end: vi.fn(),
   }
-  return { mockShellStream, mockClient }
+  return { mockShellStream: stream, mockClient: client }
 })
 
 vi.mock('ssh2', () => {
@@ -53,21 +53,40 @@ describe('SshAdapter', () => {
       return mockClient
     })
 
-    mockClient.connect.mockImplementation((config: { hostVerifier?: (key: Buffer) => boolean }) => {
-      // Simulate ssh2 calling hostVerifier with a mock host key in wire format
-      if (config.hostVerifier) {
-        const keyType = 'ssh-ed25519'
-        const keyBuf = Buffer.alloc(4 + keyType.length + 32)
-        keyBuf.writeUInt32BE(keyType.length, 0)
-        keyBuf.write(keyType, 4)
-        config.hostVerifier(keyBuf)
-      }
-      // Auto-trigger ready
-      const handler = (mockClient as Record<string, unknown>)._readyHandler as () => void
-      if (handler) {
-        setTimeout(handler, 0)
-      }
-    })
+    mockClient.connect.mockImplementation(
+      (config: { hostVerifier?: (key: Buffer, verify: (valid: boolean) => void) => void }) => {
+        // Simulate ssh2 calling hostVerifier with a mock host key in wire format (async callback form)
+        if (config.hostVerifier) {
+          const keyType = 'ssh-ed25519'
+          const keyBuf = Buffer.alloc(4 + keyType.length + 32)
+          keyBuf.writeUInt32BE(keyType.length, 0)
+          keyBuf.write(keyType, 4)
+          config.hostVerifier(keyBuf, (valid: boolean) => {
+            if (!valid) {
+              // Trigger error handler for rejected host key
+              const errorHandler = (mockClient as Record<string, unknown>)._errorHandler as (
+                err: Error,
+              ) => void
+              if (errorHandler) {
+                errorHandler(new Error('Host key verification rejected'))
+              }
+              return
+            }
+            // Auto-trigger ready after successful verification
+            const handler = (mockClient as Record<string, unknown>)._readyHandler as () => void
+            if (handler) {
+              setTimeout(handler, 0)
+            }
+          })
+        } else {
+          // Auto-trigger ready
+          const handler = (mockClient as Record<string, unknown>)._readyHandler as () => void
+          if (handler) {
+            setTimeout(handler, 0)
+          }
+        }
+      },
+    )
 
     mockClient.shell.mockImplementation(
       (_opts: unknown, cb: (err: Error | null, stream: typeof mockShellStream) => void) => {

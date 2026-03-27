@@ -1,6 +1,6 @@
-import SSHConfig from 'ssh-config'
+import SSHConfig, { LineType } from 'ssh-config'
 import { readFileSync, existsSync } from 'node:fs'
-import { join, resolve, sep } from 'node:path'
+import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { AuthMethod } from '../domain/types'
 
@@ -41,7 +41,7 @@ export function parseSshConfig(configPath?: string): SshConfigParseResult {
   const hosts: ParsedSshHost[] = []
 
   for (const section of config) {
-    if (section.type !== SSHConfig.DIRECTIVE || section.param !== 'Host') {
+    if (section.type !== LineType.DIRECTIVE || section.param !== 'Host') {
       continue
     }
     const hostPattern = String(section.value ?? '')
@@ -55,7 +55,7 @@ export function parseSshConfig(configPath?: string): SshConfigParseResult {
     if ('config' in section && Array.isArray(section.config)) {
       for (const line of section.config) {
         if (
-          line.type === SSHConfig.DIRECTIVE &&
+          line.type === LineType.DIRECTIVE &&
           line.param &&
           !SUPPORTED_DIRECTIVES.has(line.param)
         ) {
@@ -76,9 +76,12 @@ export function parseSshConfig(configPath?: string): SshConfigParseResult {
     const user = Array.isArray(userRaw) ? (userRaw[0] ?? null) : (userRaw ?? null)
 
     const identityFileRaw = computed.IdentityFile
-    const identityFile = Array.isArray(identityFileRaw)
+    const identityFileValue = Array.isArray(identityFileRaw)
       ? (identityFileRaw[0] ?? null)
       : (identityFileRaw ?? null)
+    const identityFile = identityFileValue?.startsWith('~/')
+      ? join(homedir(), identityFileValue.slice(2))
+      : identityFileValue
 
     const forwardAgentRaw = computed.ForwardAgent
     const forwardAgent = Array.isArray(forwardAgentRaw)

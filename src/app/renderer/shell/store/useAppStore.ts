@@ -14,6 +14,12 @@ function applySetStateAction<T>(previous: T, action: SetStateAction<T>): T {
   return typeof action === 'function' ? (action as (prev: T) => T)(previous) : action
 }
 
+export interface PendingSshSession {
+  sessionId: string
+  targetName: string
+  targetId: string
+}
+
 export interface AppStoreState {
   workspaces: WorkspaceState[]
   activeWorkspaceId: string | null
@@ -24,6 +30,7 @@ export interface AppStoreState {
   isSettingsOpen: boolean
   focusRequest: FocusRequest | null
   persistNotice: PersistNotice | null
+  pendingSshSession: PendingSshSession | null
 
   setWorkspaces: (action: SetStateAction<WorkspaceState[]>) => void
   setActiveWorkspaceId: (action: SetStateAction<string | null>) => void
@@ -36,6 +43,7 @@ export interface AppStoreState {
   setIsSettingsOpen: (action: SetStateAction<boolean>) => void
   setFocusRequest: (action: SetStateAction<FocusRequest | null>) => void
   setPersistNotice: (action: SetStateAction<PersistNotice | null>) => void
+  setPendingSshSession: (action: SetStateAction<PendingSshSession | null>) => void
 }
 
 export const useAppStore = create<AppStoreState>(set => ({
@@ -48,6 +56,7 @@ export const useAppStore = create<AppStoreState>(set => ({
   isSettingsOpen: false,
   focusRequest: null,
   persistNotice: null,
+  pendingSshSession: null,
 
   setWorkspaces: action =>
     set(state => ({ workspaces: applySetStateAction(state.workspaces, action) })),
@@ -69,4 +78,6 @@ export const useAppStore = create<AppStoreState>(set => ({
     set(state => ({ focusRequest: applySetStateAction(state.focusRequest, action) })),
   setPersistNotice: action =>
     set(state => ({ persistNotice: applySetStateAction(state.persistNotice, action) })),
+  setPendingSshSession: action =>
+    set(state => ({ pendingSshSession: applySetStateAction(state.pendingSshSession, action) })),
 }))

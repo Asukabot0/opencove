@@ -6,7 +6,6 @@ import type {
 } from '../../../shared/contracts/dto'
 import type {
   TerminalSessionAdapter,
-  TerminalSessionAdapterStream,
   TerminalSessionOpenOptions,
   TerminalSessionOpenResult,
 } from '../domain/TerminalSessionAdapter'
@@ -295,7 +294,10 @@ export class TerminalSessionManager {
       this.clearSessionProbeState(sessionId)
       this.sessionStateWatcher.disposeSession(sessionId)
       this.sessionAgentWatcherSupport.delete(sessionId)
+      this.sessionKindMap.delete(sessionId)
       this.cleanupSessionPtyDataSubscriptions(sessionId)
+      // Note: sessionAdapterMap is intentionally kept so snapshot() remains
+      // accessible after exit (adapter.delete with keepSnapshot preserves data).
       adapter.delete(sessionId, { keepSnapshot: true })
       const eventPayload: TerminalExitEvent = {
         sessionId,

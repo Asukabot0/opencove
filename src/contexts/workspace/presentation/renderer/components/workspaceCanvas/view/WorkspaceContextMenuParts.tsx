@@ -4,6 +4,7 @@ import {
   Check,
   ChevronRight,
   FileText,
+  Globe,
   Group,
   LayoutGrid,
   ListTodo,
@@ -29,6 +30,7 @@ function renderMark(checked: boolean): React.JSX.Element {
 
 export function WorkspaceContextPaneMenuContent({
   createTerminalNode,
+  openRemoteSettings,
   createNoteNodeFromContextMenu,
   openTaskCreator,
   openAgentLauncher,
@@ -45,6 +47,7 @@ export function WorkspaceContextPaneMenuContent({
   onToggleMagneticSnapping,
 }: {
   createTerminalNode: () => Promise<void>
+  openRemoteSettings: () => void
   createNoteNodeFromContextMenu: () => void
   openTaskCreator: () => void
   openAgentLauncher: () => void
@@ -75,6 +78,16 @@ export function WorkspaceContextPaneMenuContent({
         <span className="workspace-context-menu__label">
           {t('workspaceContextMenu.newTerminal')}
         </span>
+      </button>
+      <button
+        type="button"
+        data-testid="workspace-context-connect-remote"
+        onClick={() => {
+          openRemoteSettings()
+        }}
+      >
+        <Globe className="workspace-context-menu__icon" aria-hidden="true" />
+        <span className="workspace-context-menu__label">{t('remote.connect')}</span>
       </button>
       <button
         type="button"
