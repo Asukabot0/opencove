@@ -19,6 +19,12 @@ import { createPersistenceStore } from '../../../platform/persistence/sqlite/Per
 import { registerPersistenceIpcHandlers } from '../../../platform/persistence/sqlite/ipc/register'
 import { registerWindowChromeIpcHandlers } from './registerWindowChromeIpcHandlers'
 import { registerWindowMetricsIpcHandlers } from './registerWindowMetricsIpcHandlers'
+import {
+  registerRemoteIpcHandlers,
+  registerSshConnectHandler,
+} from '../../../contexts/remote/presentation/main-ipc/register'
+import { registerCredentialResponseHandler } from '../../../contexts/remote/presentation/main-ipc/credentialIpc'
+import { DrizzleRemoteTargetRepository } from '../../../contexts/remote/infrastructure/DrizzleRemoteTargetRepository'
 
 export type { IpcRegistrationDisposable } from './types'
 
@@ -46,11 +52,25 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
     return await persistenceStorePromise
   }
 
+  // Remote target repository (cached singleton, reuses persistence store's shared db connection)
+  let cachedRemoteTargetRepo: DrizzleRemoteTargetRepository | null = null
+  const getRemoteTargetRepo = async () => {
+    if (cachedRemoteTargetRepo) {
+      return cachedRemoteTargetRepo
+    }
+    const store = await getPersistenceStore()
+    cachedRemoteTargetRepo = new DrizzleRemoteTargetRepository(store.drizzleDb)
+    return cachedRemoteTargetRepo
+  }
+
   if (process.env.NODE_ENV === 'test' && process.env.OPENCOVE_TEST_WORKSPACE) {
     void approvedWorkspaces.registerRoot(resolve(process.env.OPENCOVE_TEST_WORKSPACE))
   }
 
   const disposables: IpcRegistrationDisposable[] = [
+    registerRemoteIpcHandlers(getRemoteTargetRepo),
+    registerSshConnectHandler(getRemoteTargetRepo, ptyRuntime),
+    registerCredentialResponseHandler(),
     registerClipboardIpcHandlers(),
     registerAppUpdateIpcHandlers(appUpdateService),
     registerReleaseNotesIpcHandlers(releaseNotesService),
@@ -71,6 +91,7 @@ export function registerIpcHandlers(): IpcRegistrationDisposable {
         disposables[index]?.dispose()
       }
 
+      cachedRemoteTargetRepo = null
       const storePromise = persistenceStorePromise
       persistenceStorePromise = null
       storePromise

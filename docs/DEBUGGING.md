@@ -163,6 +163,29 @@ pnpm test:e2e
 - 是否应改为冒泡阶段的 `onWheel`
 - 是否阻断了 React Flow，同时保留了 xterm 默认滚动
 
+## Known Issues
+
+### node-pty E2E 进程退出崩溃 (macOS, Electron 35)
+
+**现象**: E2E 测试全部通过，但 macOS 弹出 4-5 次 Electron 崩溃报告对话框。
+
+**崩溃特征**:
+- `EXC_CRASH / SIGABRT (abort() called)`
+- 堆栈: `Napi::Error::ThrowAsJavaScriptException()` -> `ThreadSafeFunction::CallJS()` -> `node::Environment::CleanupHandles()` -> `node::FreeEnvironment()`
+- 崩溃时机: 测试窗口关闭 / Electron 进程退出阶段
+
+**根因**: node-pty 的 native addon 使用 N-API `ThreadSafeFunction` 跨线程回调。在 Electron 进程退出时，Node.js 环境清理（`FreeEnvironment`）触发 pty 回调，但此时环境已在销毁中，导致 `ThrowAsJavaScriptException` 无法正常抛出 -> `abort()`。这是 node-pty + Electron 35 + macOS ARM64 的已知竞态条件。
+
+**影响**: 无功能影响。测试结果不受影响（崩溃发生在测试完成后的窗口关闭阶段）。
+
+**Workaround**: 忽略这些崩溃报告。它们不代表实际的应用程序 bug。
+
+**潜在修复方向** (低优先级):
+- 在 `PtyRuntime.dispose()` 中确保所有 pty session 在 Electron `will-quit` 事件前已完全 kill + 等待退出
+- 或升级 node-pty 到修复了 `ThreadSafeFunction` 清理顺序的版本（如果有）
+
+**首次发现**: 2026-03-27, E2E 测试 169 passed / 0 failed, 但产生 5 个 `Electron-*.ips` 崩溃报告。
+
 ## 一句话原则
 
 - **先确认是不是旧构建，再怀疑代码。**

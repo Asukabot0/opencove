@@ -66,6 +66,7 @@ export function WorkspaceCanvasInner({
     onShowMessage,
     standardWindowSizeBucket: agentSettings.standardWindowSizeBucket,
   })
+  workspaceCanvasHooks.useSshSessionNode(createNodeForSession)
   const { updateSpaceDirectory, getSpaceBlockingNodes, closeNodesById } =
     workspaceCanvasHooks.useWorkspaceCanvasSpaceDirectoryOps({
       workspacePath,

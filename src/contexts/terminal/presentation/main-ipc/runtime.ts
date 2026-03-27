@@ -1,4 +1,5 @@
 import { webContents } from 'electron'
+import type { WebContents } from 'electron'
 import { IPC_CHANNELS } from '../../../../shared/contracts/ipc'
 import type {
   AgentLaunchMode,
@@ -6,13 +7,21 @@ import type {
   TerminalDataEvent,
   TerminalWriteEncoding,
 } from '../../../../shared/contracts/dto'
+import type { SshConnectionStateEvent } from '../../../../shared/contracts/dto/remote'
 import type { SpawnPtyOptions } from '../../../../platform/process/pty/PtyManager'
 import { LocalPtyAdapter } from '../../../../platform/process/pty/LocalPtyAdapter'
+import type {
+  CredentialResolver,
+  HostKeyVerifier,
+} from '../../../../platform/process/ssh/SshAdapter'
 import { TerminalProfileResolver } from '../../../../platform/terminal/TerminalProfileResolver'
 import type { GeminiSessionDiscoveryCursor } from '../../../agent/infrastructure/cli/AgentSessionLocatorProviders'
 import { createSessionStateWatcherController } from './sessionStateWatcher'
 import { TerminalSessionManager } from '../../application/TerminalSessionManager'
-import type { TerminalSessionAdapter } from '../../domain/TerminalSessionAdapter'
+import type {
+  TerminalSessionAdapter,
+  TerminalSessionOpenOptions,
+} from '../../domain/TerminalSessionAdapter'
 import type { SessionKind } from '../../domain/types'
 
 export interface StartSessionStateWatcherInput {
@@ -41,6 +50,10 @@ export interface PtyRuntime {
   detach: (contentsId: number, sessionId: string) => void
   snapshot: (sessionId: string) => string
   startSessionStateWatcher: (input: StartSessionStateWatcherInput) => void
+  openSshSession: (options: TerminalSessionOpenOptions) => Promise<{ sessionId: string }>
+  emitSshConnectionState: (event: SshConnectionStateEvent) => void
+  registerSshCredentialResolver: (targetId: string, webContents: WebContents) => void
+  unregisterSshCredentialResolver: (targetId: string) => void
   dispose: () => void
 }
 
@@ -96,6 +109,50 @@ export function createPtyRuntime(): PtyRuntime {
 
     content.once('destroyed', onDestroyed)
     return true
+  }
+
+  // SSH credential resolver dispatcher: Map<targetId, WebContents>
+  const sshCredentialDispatch = new Map<string, WebContents>()
+
+  const sshCredentialResolver: CredentialResolver = async request => {
+    const { createWebContentsCredentialResolver } =
+      await import('../../../remote/presentation/main-ipc/credentialIpc')
+    const wc = sshCredentialDispatch.get(request.targetId)
+    if (!wc || wc.isDestroyed()) {
+      throw new Error('No WebContents available for credential request')
+    }
+    return createWebContentsCredentialResolver(wc)(request)
+  }
+
+  // TOFU host key verifier: trust unknown keys, reject mismatches
+  const sshHostKeyVerifier: HostKeyVerifier = async (host, port, keyType, keyData) => {
+    const { verifyHostKey, addTrustedKey } =
+      await import('../../../remote/infrastructure/HostKeyVerifier')
+    const result = verifyHostKey(host, port, keyType, keyData)
+    if (result.status === 'trusted') {
+      return true
+    }
+    if (result.status === 'mismatch') {
+      return false
+    }
+    // unknown -> auto-accept and add to known_hosts
+    addTrustedKey(host, port, keyType, keyData)
+    return true
+  }
+
+  // Lazy-load SshAdapter to avoid pulling ssh2's WASM into test environments
+  let sshAdapterPromise: Promise<TerminalSessionAdapter> | null = null
+  const getSshAdapter = (): Promise<TerminalSessionAdapter> => {
+    if (!sshAdapterPromise) {
+      sshAdapterPromise = import('../../../../platform/process/ssh/SshAdapter').then(
+        ({ SshAdapter }) =>
+          new SshAdapter({
+            credentialResolver: sshCredentialResolver,
+            hostKeyVerifier: sshHostKeyVerifier,
+          }),
+      )
+    }
+    return sshAdapterPromise
   }
 
   const adapterRegistry = new Map<SessionKind, TerminalSessionAdapter>([['local', localAdapter]])
@@ -173,6 +230,7 @@ export function createPtyRuntime(): PtyRuntime {
       resumeSessionId,
       startedAtMs,
       opencodeBaseUrl,
+      geminiDiscoveryCursor,
     }) => {
       manager.startSessionStateWatcher({
         sessionId,
@@ -182,7 +240,26 @@ export function createPtyRuntime(): PtyRuntime {
         resumeSessionId,
         startedAtMs,
         opencodeBaseUrl,
+        geminiDiscoveryCursor,
       })
+    },
+    openSshSession: async options => {
+      // Lazy-register SSH adapter on first use
+      if (!adapterRegistry.has('ssh')) {
+        adapterRegistry.set('ssh', await getSshAdapter())
+      }
+      const result = manager.open('ssh', options)
+      const opened = result instanceof Promise ? await result : result
+      return { sessionId: opened.sessionId }
+    },
+    emitSshConnectionState: event => {
+      sendToAllWindows(IPC_CHANNELS.ptySshConnectionState, event)
+    },
+    registerSshCredentialResolver: (targetId, wc) => {
+      sshCredentialDispatch.set(targetId, wc)
+    },
+    unregisterSshCredentialResolver: targetId => {
+      sshCredentialDispatch.delete(targetId)
     },
     dispose: () => {
       manager.dispose()

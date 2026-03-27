@@ -7,6 +7,7 @@ import type {
 import type {
   TerminalSessionAdapter,
   TerminalSessionOpenOptions,
+  TerminalSessionOpenResult,
 } from '../domain/TerminalSessionAdapter'
 import type { SessionKind } from '../domain/types'
 import type {
@@ -293,7 +294,10 @@ export class TerminalSessionManager {
       this.clearSessionProbeState(sessionId)
       this.sessionStateWatcher.disposeSession(sessionId)
       this.sessionAgentWatcherSupport.delete(sessionId)
+      this.sessionKindMap.delete(sessionId)
       this.cleanupSessionPtyDataSubscriptions(sessionId)
+      // Note: sessionAdapterMap is intentionally kept so snapshot() remains
+      // accessible after exit (adapter.delete with keepSnapshot preserves data).
       adapter.delete(sessionId, { keepSnapshot: true })
       const eventPayload: TerminalExitEvent = {
         sessionId,
@@ -429,12 +433,4 @@ export class TerminalSessionManager {
     this.sessionKindMap.clear()
     this.sessionAgentWatcherSupport.clear()
   }
-}
-
-// Re-export types used by the open() method return
-import type { TerminalSessionAdapterStream } from '../domain/TerminalSessionAdapter'
-
-export interface TerminalSessionOpenResult {
-  sessionId: string
-  stream: TerminalSessionAdapterStream
 }

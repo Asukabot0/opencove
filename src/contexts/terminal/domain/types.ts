@@ -1,1 +1,1 @@
-export type SessionKind = 'local' | 'ssh'
+export type { SessionKind } from '../../../shared/contracts/dto/terminal'

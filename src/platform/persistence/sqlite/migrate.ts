@@ -4,6 +4,10 @@ import { normalizePersistedAppState } from './normalize'
 import { safeJsonParse } from './utils'
 import { writeNormalizedAppState, writeNormalizedScrollbacks } from './write'
 
+function isDuplicateColumnError(err: unknown): boolean {
+  return err instanceof Error && err.message.includes('duplicate column name')
+}
+
 function createTables(db: Database.Database): void {
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -64,7 +68,26 @@ function createTables(db: Database.Database): void {
       rect_x REAL,
       rect_y REAL,
       rect_width REAL,
-      rect_height REAL
+      rect_height REAL,
+      target_id TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS remote_targets (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL DEFAULT 22,
+      username TEXT NOT NULL,
+      auth_method TEXT NOT NULL DEFAULT 'key',
+      key_path TEXT,
+      forward_agent INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'manual',
+      imported_from TEXT,
+      secret_ref TEXT,
+      connect_timeout INTEGER NOT NULL DEFAULT 10000,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS workspace_space_nodes (
@@ -79,6 +102,9 @@ function createTables(db: Database.Database): void {
       scrollback TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_remote_targets_workspace_id
+    ON remote_targets(workspace_id);
   `)
 }
 
@@ -134,8 +160,10 @@ export function migrate(db: Database.Database): void {
         ALTER TABLE workspaces
         ADD COLUMN pull_request_base_branch_options_json TEXT NOT NULL DEFAULT '[]'
       `)
-    } catch {
-      // ignore (column already exists)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
     }
 
     db.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
@@ -150,8 +178,10 @@ export function migrate(db: Database.Database): void {
         ALTER TABLE nodes
         ADD COLUMN label_color_override TEXT
       `)
-    } catch {
-      // ignore (column already exists)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
     }
 
     try {
@@ -159,8 +189,28 @@ export function migrate(db: Database.Database): void {
         ALTER TABLE workspace_spaces
         ADD COLUMN label_color TEXT
       `)
-    } catch {
-      // ignore (column already exists)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
+    }
+
+    db.pragma(`user_version = ${DB_SCHEMA_VERSION}`)
+    return
+  }
+
+  if (currentVersion === 4) {
+    createTables(db)
+
+    try {
+      db.exec(`
+        ALTER TABLE workspace_spaces
+        ADD COLUMN target_id TEXT
+      `)
+    } catch (err) {
+      if (!isDuplicateColumnError(err)) {
+        throw err
+      }
     }
 
     db.pragma(`user_version = ${DB_SCHEMA_VERSION}`)

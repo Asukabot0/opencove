@@ -4,12 +4,14 @@ import {
   Check,
   ChevronRight,
   FileText,
+  Globe,
   Group,
   LayoutGrid,
   ListTodo,
   LoaderCircle,
   Magnet,
   Play,
+  Settings,
   SlidersHorizontal,
   Tag,
   Terminal,
@@ -17,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useTranslation } from '@app/renderer/i18n'
 import { AGENT_PROVIDER_LABEL, type AgentProvider } from '@contexts/settings/domain/agentSettings'
+import type { RemoteTargetDto } from '@shared/contracts/dto/remote'
 import { LABEL_COLORS, type NodeLabelColorOverride } from '@shared/types/labelColor'
 
 function renderMark(checked: boolean): React.JSX.Element {
@@ -29,6 +32,10 @@ function renderMark(checked: boolean): React.JSX.Element {
 
 export function WorkspaceContextPaneMenuContent({
   createTerminalNode,
+  openRemoteTargetSubmenu,
+  remoteTargetToggleRef,
+  isLoadingRemoteTargets,
+  isRemoteTargetSubmenuOpen,
   createNoteNodeFromContextMenu,
   openTaskCreator,
   openAgentLauncher,
@@ -45,6 +52,10 @@ export function WorkspaceContextPaneMenuContent({
   onToggleMagneticSnapping,
 }: {
   createTerminalNode: () => Promise<void>
+  openRemoteTargetSubmenu: () => void
+  remoteTargetToggleRef: React.RefObject<HTMLButtonElement | null>
+  isLoadingRemoteTargets: boolean
+  isRemoteTargetSubmenuOpen: boolean
   createNoteNodeFromContextMenu: () => void
   openTaskCreator: () => void
   openAgentLauncher: () => void
@@ -75,6 +86,32 @@ export function WorkspaceContextPaneMenuContent({
         <span className="workspace-context-menu__label">
           {t('workspaceContextMenu.newTerminal')}
         </span>
+      </button>
+      <button
+        ref={remoteTargetToggleRef}
+        type="button"
+        data-testid="workspace-context-connect-remote"
+        aria-haspopup="menu"
+        aria-expanded={isRemoteTargetSubmenuOpen}
+        onMouseEnter={openRemoteTargetSubmenu}
+        onFocus={openRemoteTargetSubmenu}
+        onClick={openRemoteTargetSubmenu}
+      >
+        <Globe className="workspace-context-menu__icon" aria-hidden="true" />
+        <span className="workspace-context-menu__label">{t('remote.connect')}</span>
+        {isLoadingRemoteTargets ? (
+          <LoaderCircle
+            className="workspace-context-menu__icon workspace-context-menu__spinner"
+            aria-hidden="true"
+          />
+        ) : (
+          <ChevronRight
+            className={`workspace-context-menu__icon workspace-context-menu__chevron ${
+              isRemoteTargetSubmenuOpen ? 'workspace-context-menu__chevron--open' : ''
+            }`}
+            aria-hidden="true"
+          />
+        )}
       </button>
       <button
         type="button"
@@ -387,6 +424,75 @@ export function WorkspaceContextLabelColorSubmenu({
           <span className="workspace-context-menu__label">{t(`labelColors.${color}`)}</span>
         </button>
       ))}
+    </div>
+  )
+}
+
+export function WorkspaceContextRemoteTargetSubmenu({
+  targets,
+  submenuRef,
+  style,
+  keepSubmenuOpen,
+  scheduleSubmenuClose,
+  onSelectTarget,
+  onManageTargets,
+}: {
+  targets: RemoteTargetDto[]
+  submenuRef: React.RefObject<HTMLDivElement | null>
+  style: React.CSSProperties
+  keepSubmenuOpen: () => void
+  scheduleSubmenuClose: () => void
+  onSelectTarget: (target: RemoteTargetDto) => void
+  onManageTargets: () => void
+}): React.JSX.Element {
+  const { t } = useTranslation()
+
+  return (
+    <div
+      ref={submenuRef}
+      className="workspace-context-menu workspace-canvas-context-menu workspace-canvas-context-menu--submenu"
+      data-testid="workspace-context-remote-target-menu"
+      style={style}
+      onMouseDown={event => {
+        event.stopPropagation()
+      }}
+      onClick={event => {
+        event.stopPropagation()
+      }}
+      onMouseEnter={keepSubmenuOpen}
+      onMouseLeave={scheduleSubmenuClose}
+    >
+      {targets.length > 0 ? (
+        targets.map(target => (
+          <button
+            key={target.id}
+            type="button"
+            data-testid={`workspace-context-remote-target-${target.id}`}
+            onClick={() => {
+              onSelectTarget(target)
+            }}
+          >
+            <Globe className="workspace-context-menu__icon" aria-hidden="true" />
+            <span className="workspace-context-menu__label">
+              {target.name}
+              <span style={{ marginLeft: 6, opacity: 0.5, fontSize: '0.85em' }}>
+                {target.username}@{target.host}
+              </span>
+            </span>
+          </button>
+        ))
+      ) : (
+        <button type="button" disabled>
+          <span className="workspace-context-menu__label" style={{ opacity: 0.5 }}>
+            {t('remote.noTargets')}
+          </span>
+        </button>
+      )}
+      <div className="workspace-context-menu__separator" />
+      <button type="button" data-testid="workspace-context-remote-manage" onClick={onManageTargets}>
+        <Settings className="workspace-context-menu__icon" aria-hidden="true" />
+        <span className="workspace-context-menu__label">{t('remote.manageTargets')}</span>
+      </button>
     </div>
   )
 }

@@ -11,6 +11,7 @@ function createPersistenceStoreStub() {
     writeAppState: vi.fn(async (_state: unknown) => writeResult),
     readNodeScrollback: vi.fn(async (_nodeId: string) => null),
     writeNodeScrollback: vi.fn(async (_nodeId: string, _scrollback: string | null) => writeResult),
+    drizzleDb: {} as never,
     consumeRecovery: vi.fn(() => null),
     dispose: vi.fn(),
   }
@@ -34,6 +35,8 @@ describe('registerIpcHandlers', () => {
     const ipcMain = {
       handle: vi.fn(),
       removeHandler: vi.fn(),
+      on: vi.fn(),
+      removeListener: vi.fn(),
     }
 
     const clipboard = {

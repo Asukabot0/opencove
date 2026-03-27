@@ -65,6 +65,21 @@ import type {
   WriteTerminalInput,
   DeleteCanvasImageInput,
 } from '../../shared/contracts/dto'
+import type {
+  RemoteTargetDto,
+  CreateRemoteTargetInput,
+  UpdateRemoteTargetInput,
+  DeleteRemoteTargetInput,
+  DeleteRemoteTargetResult,
+  ImportSshConfigInput,
+  ImportSshConfigResult,
+  SshConnectInput,
+  SshConnectResult,
+  SshConnectError,
+  SshCredentialRequestDto,
+  SshCredentialResponseDto,
+  SshConnectionStateEvent,
+} from '../../shared/contracts/dto/remote'
 import { invokeIpc } from './ipcInvoke'
 
 type UnsubscribeFn = () => void
@@ -251,6 +266,45 @@ const opencoveApi = {
   task: {
     suggestTitle: (payload: SuggestTaskTitleInput): Promise<SuggestTaskTitleResult> =>
       invokeIpc(IPC_CHANNELS.taskSuggestTitle, payload),
+  },
+  remote: {
+    listTargets: (workspaceId: string): Promise<RemoteTargetDto[]> =>
+      invokeIpc(IPC_CHANNELS.remoteListTargets, workspaceId),
+    getTarget: (id: string): Promise<RemoteTargetDto | null> =>
+      invokeIpc(IPC_CHANNELS.remoteGetTarget, id),
+    createTarget: (payload: CreateRemoteTargetInput): Promise<RemoteTargetDto> =>
+      invokeIpc(IPC_CHANNELS.remoteCreateTarget, payload),
+    updateTarget: (payload: UpdateRemoteTargetInput): Promise<RemoteTargetDto> =>
+      invokeIpc(IPC_CHANNELS.remoteUpdateTarget, payload),
+    deleteTarget: (payload: DeleteRemoteTargetInput): Promise<DeleteRemoteTargetResult> =>
+      invokeIpc(IPC_CHANNELS.remoteDeleteTarget, payload),
+    importSshConfig: (payload: ImportSshConfigInput): Promise<ImportSshConfigResult> =>
+      invokeIpc(IPC_CHANNELS.remoteImportSshConfig, payload),
+  },
+  ssh: {
+    connect: (payload: SshConnectInput): Promise<SshConnectResult | SshConnectError> =>
+      invokeIpc(IPC_CHANNELS.sshConnect, payload),
+    onCredentialRequest: (listener: (event: SshCredentialRequestDto) => void): UnsubscribeFn => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: SshCredentialRequestDto) => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.sshCredentialRequest, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.sshCredentialRequest, handler)
+      }
+    },
+    sendCredentialResponse: (payload: SshCredentialResponseDto): void => {
+      ipcRenderer.send(IPC_CHANNELS.sshCredentialResponse, payload)
+    },
+    onConnectionState: (listener: (event: SshConnectionStateEvent) => void): UnsubscribeFn => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: SshConnectionStateEvent) => {
+        listener(payload)
+      }
+      ipcRenderer.on(IPC_CHANNELS.ptySshConnectionState, handler)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.ptySshConnectionState, handler)
+      }
+    },
   },
 }
 

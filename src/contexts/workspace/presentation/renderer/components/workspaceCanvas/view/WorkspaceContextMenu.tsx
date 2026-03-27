@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { AGENT_PROVIDERS, type AgentProvider } from '@contexts/settings/domain/agentSettings'
+import type { RemoteTargetDto } from '@shared/contracts/dto/remote'
 import type { NodeLabelColorOverride } from '@shared/types/labelColor'
 import type { WorkspaceSpaceState } from '../../../types'
 import type { ContextMenuState } from '../types'
@@ -16,8 +17,10 @@ import {
   WorkspaceContextAgentProviderSubmenu,
   WorkspaceContextLabelColorSubmenu,
   WorkspaceContextPaneMenuContent,
+  WorkspaceContextRemoteTargetSubmenu,
   WorkspaceContextSelectionMenuContent,
 } from './WorkspaceContextMenuParts'
+import { useAppStore } from '@app/renderer/shell/store/useAppStore'
 import {
   MENU_WIDTH,
   SUBMENU_CLOSE_DELAY_MS,
@@ -30,7 +33,7 @@ import {
   placeSubmenuAtItem,
 } from './WorkspaceContextMenu.helpers'
 
-type OpenSubmenu = 'arrangeBy' | 'agent-providers' | 'label-color' | null
+type OpenSubmenu = 'arrangeBy' | 'agent-providers' | 'label-color' | 'remote-targets' | null
 
 interface WorkspaceContextMenuProps {
   contextMenu: ContextMenuState | null
@@ -85,6 +88,8 @@ export function WorkspaceContextMenu({
   const closeSubmenuTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const [installedProviders, setInstalledProviders] = useState<AgentProvider[] | null>(null)
   const [isLoadingInstalledProviders, setIsLoadingInstalledProviders] = useState(false)
+  const [remoteTargets, setRemoteTargets] = useState<RemoteTargetDto[] | null>(null)
+  const [isLoadingRemoteTargets, setIsLoadingRemoteTargets] = useState(false)
 
   const sortedInstalledProviders = useMemo(() => {
     if (!installedProviders) {
@@ -143,6 +148,73 @@ export function WorkspaceContextMenu({
     loadInstalledProviders,
   ])
 
+  const loadRemoteTargets = useCallback(async () => {
+    if (remoteTargets !== null || isLoadingRemoteTargets) {
+      return
+    }
+
+    const workspaceId = useAppStore.getState().activeWorkspaceId
+    if (!workspaceId) {
+      setRemoteTargets([])
+      return
+    }
+
+    setIsLoadingRemoteTargets(true)
+    try {
+      const result = await window.opencoveApi.remote.listTargets(workspaceId)
+      setRemoteTargets(result)
+    } catch {
+      setRemoteTargets([])
+    } finally {
+      setIsLoadingRemoteTargets(false)
+    }
+  }, [remoteTargets, isLoadingRemoteTargets])
+
+  const openRemoteTargetSubmenu = useCallback(() => {
+    cancelScheduledSubmenuClose()
+    setOpenSubmenu('remote-targets')
+
+    if (remoteTargets === null && !isLoadingRemoteTargets) {
+      void loadRemoteTargets()
+    }
+  }, [cancelScheduledSubmenuClose, remoteTargets, isLoadingRemoteTargets, loadRemoteTargets])
+
+  const keepRemoteTargetSubmenuOpen = useCallback(() => {
+    cancelScheduledSubmenuClose()
+    setOpenSubmenu('remote-targets')
+  }, [cancelScheduledSubmenuClose])
+
+  const handleConnectSshTarget = useCallback(
+    async (target: RemoteTargetDto) => {
+      const anchor =
+        contextMenu?.kind === 'pane'
+          ? { x: contextMenu.flowX, y: contextMenu.flowY }
+          : { x: 100, y: 100 }
+
+      closeContextMenu()
+
+      try {
+        const result = await window.opencoveApi.ssh.connect({
+          targetId: target.id,
+          cols: 80,
+          rows: 24,
+        })
+
+        if ('sessionId' in result) {
+          useAppStore.getState().setPendingSshSession({
+            sessionId: result.sessionId as string,
+            targetName: target.name,
+            targetId: target.id,
+            anchor,
+          })
+        }
+      } catch (error) {
+        console.warn('[SSH] Connect from context menu failed:', error)
+      }
+    },
+    [contextMenu, closeContextMenu],
+  )
+
   const openArrangeSubmenu = useCallback(() => {
     cancelScheduledSubmenuClose()
     setOpenSubmenu('arrangeBy')
@@ -156,6 +228,7 @@ export function WorkspaceContextMenu({
   useEffect(() => {
     cancelScheduledSubmenuClose()
     setOpenSubmenu(null)
+    setRemoteTargets(null)
   }, [cancelScheduledSubmenuClose, contextMenu?.kind, contextMenu?.x, contextMenu?.y])
 
   useEffect(() => {
@@ -175,6 +248,7 @@ export function WorkspaceContextMenu({
   const arrangeSpaceFitRef = React.useRef<WorkspaceArrangeSpaceFit>('tight')
   const menuRef = React.useRef<HTMLDivElement | null>(null)
   const submenuRef = React.useRef<HTMLDivElement | null>(null)
+  const remoteTargetToggleRef = React.useRef<HTMLButtonElement | null>(null)
   const agentProviderToggleRef = React.useRef<HTMLButtonElement | null>(null)
   const arrangeByButtonRef = React.useRef<HTMLButtonElement | null>(null)
   const labelColorButtonRef = React.useRef<HTMLButtonElement | null>(null)
@@ -348,7 +422,7 @@ export function WorkspaceContextMenu({
         ? previous
         : { width: nextRect.width, height: nextRect.height },
     )
-  }, [openSubmenu, contextMenu, sortedInstalledProviders.length])
+  }, [openSubmenu, contextMenu, sortedInstalledProviders.length, remoteTargets?.length])
 
   if (!contextMenu) {
     return null
@@ -376,9 +450,11 @@ export function WorkspaceContextMenu({
       ? arrangeByButtonRef.current
       : openSubmenu === 'agent-providers'
         ? agentProviderToggleRef.current
-        : openSubmenu === 'label-color'
-          ? labelColorButtonRef.current
-          : null
+        : openSubmenu === 'remote-targets'
+          ? remoteTargetToggleRef.current
+          : openSubmenu === 'label-color'
+            ? labelColorButtonRef.current
+            : null
   const measuredSubmenuAnchorRect = activeSubmenuAnchor?.getBoundingClientRect() ?? null
   const submenuMaxHeight = Math.min(SUBMENU_MAX_HEIGHT, viewportHeight - VIEWPORT_PADDING * 2)
   const submenuVisibleHeight =
@@ -419,6 +495,8 @@ export function WorkspaceContextMenu({
     contextMenu.kind === 'pane' &&
     openSubmenu === 'agent-providers' &&
     sortedInstalledProviders.length > 0
+  const shouldShowRemoteTargetSubmenu =
+    contextMenu.kind === 'pane' && openSubmenu === 'remote-targets' && remoteTargets !== null
   const shouldShowLabelColorSubmenu =
     contextMenu.kind === 'selection' && openSubmenu === 'label-color'
   const sharedSubmenuStyle = {
@@ -445,6 +523,10 @@ export function WorkspaceContextMenu({
         {contextMenu.kind === 'pane' ? (
           <WorkspaceContextPaneMenuContent
             createTerminalNode={createTerminalNode}
+            openRemoteTargetSubmenu={openRemoteTargetSubmenu}
+            remoteTargetToggleRef={remoteTargetToggleRef}
+            isLoadingRemoteTargets={isLoadingRemoteTargets}
+            isRemoteTargetSubmenuOpen={openSubmenu === 'remote-targets'}
             createNoteNodeFromContextMenu={createNoteNodeFromContextMenu}
             openTaskCreator={openTaskCreator}
             openAgentLauncher={openAgentLauncher}
@@ -516,6 +598,23 @@ export function WorkspaceContextMenu({
           scheduleSubmenuClose={scheduleSubmenuClose}
           setSelectedNodeLabelColorOverride={setSelectedNodeLabelColorOverride}
           closeContextMenu={closeContextMenu}
+        />
+      ) : null}
+
+      {shouldShowRemoteTargetSubmenu ? (
+        <WorkspaceContextRemoteTargetSubmenu
+          targets={remoteTargets ?? []}
+          submenuRef={submenuRef}
+          style={sharedSubmenuStyle}
+          keepSubmenuOpen={keepRemoteTargetSubmenuOpen}
+          scheduleSubmenuClose={scheduleSubmenuClose}
+          onSelectTarget={target => {
+            void handleConnectSshTarget(target)
+          }}
+          onManageTargets={() => {
+            useAppStore.getState().setIsSettingsOpen(true)
+            closeContextMenu()
+          }}
         />
       ) : null}
     </>

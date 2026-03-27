@@ -24,6 +24,7 @@ import { ShortcutsSection } from './settingsPanel/ShortcutsSection'
 import { TaskConfigurationSection } from './settingsPanel/TaskConfigurationSection'
 import { WorkspaceSection } from './settingsPanel/WorkspaceSection'
 import type { WorkspaceState } from '@contexts/workspace/presentation/renderer/types'
+import { RemoteTargetManager } from '@contexts/remote/presentation/renderer/components/RemoteTargetManager'
 
 interface ProviderModelCatalogEntry {
   models: string[]
@@ -38,6 +39,7 @@ interface SettingsPanelProps {
   updateState: AppUpdateState | null
   modelCatalogByProvider: Record<AgentProvider, ProviderModelCatalogEntry>
   workspaces: WorkspaceState[]
+  activeWorkspaceId: string | null
   onWorkspaceWorktreesRootChange: (workspaceId: string, worktreesRoot: string) => void
   isFocusNodeTargetZoomPreviewing: boolean
   onFocusNodeTargetZoomPreviewChange: (isPreviewing: boolean) => void
@@ -55,6 +57,7 @@ type CorePageId =
   | 'shortcuts'
   | 'task-configuration'
   | 'integrations'
+  | 'remote'
 type WorkspacePageId = `workspace:${string}`
 type SettingsPageId = CorePageId | WorkspacePageId
 
@@ -86,6 +89,7 @@ export function SettingsPanel({
   updateState,
   modelCatalogByProvider,
   workspaces,
+  activeWorkspaceId,
   onWorkspaceWorktreesRootChange,
   isFocusNodeTargetZoomPreviewing,
   onFocusNodeTargetZoomPreviewChange,
@@ -331,6 +335,11 @@ export function SettingsPanel({
             label={t('settingsPanel.nav.integrations')}
             testId="settings-section-nav-integrations"
           />
+          <NavButton
+            id="remote"
+            label={t('settingsPanel.nav.remote')}
+            testId="settings-section-nav-remote"
+          />
 
           <div className="settings-panel__nav-group-label">{t('settingsPanel.nav.projects')}</div>
           <div className="settings-panel__nav-group">
@@ -403,6 +412,16 @@ export function SettingsPanel({
                 githubPullRequestsEnabled={settings.githubPullRequestsEnabled}
                 onChangeGitHubPullRequestsEnabled={updateGitHubPullRequestsEnabled}
               />
+            ) : null}
+
+            {activePageId === 'remote' ? (
+              activeWorkspaceId ? (
+                <RemoteTargetManager workspaceId={activeWorkspaceId} />
+              ) : (
+                <p className="settings-panel__empty-message">
+                  {t('settingsPanel.workspace.selectProjectFirst')}
+                </p>
+              )
             ) : null}
 
             {activePageId === 'canvas' ? (
