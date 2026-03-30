@@ -69,9 +69,12 @@ export function WorkspaceCanvasView({
   spaceFramePreview,
   selectedSpaceIds,
   openExplorerSpaceId,
+  explorerClipboard,
   openSpaceExplorer,
   toggleSpaceExplorer,
   closeSpaceExplorer,
+  setExplorerClipboard,
+  findBlockingOpenDocument,
   openFileInSpace,
   handleSpaceDragHandlePointerDown,
   editingSpaceId,
@@ -308,6 +311,10 @@ export function WorkspaceCanvasView({
               : workspacePath
           }
           rect={activeExplorerSpace.rect}
+          explorerClipboard={explorerClipboard}
+          setExplorerClipboard={setExplorerClipboard}
+          findBlockingOpenDocument={findBlockingOpenDocument}
+          onShowMessage={onShowMessage}
           onClose={closeSpaceExplorer}
           onOpenFile={(uri, options) => {
             openFileInSpace(activeExplorerSpace.id, uri, options)

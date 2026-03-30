@@ -65,13 +65,17 @@ import type {
   WriteWorkspaceStateRawInput,
   WriteTerminalInput,
   DeleteCanvasImageInput,
+  CopyEntryInput,
   CreateDirectoryInput,
+  DeleteEntryInput,
+  MoveEntryInput,
   ReadDirectoryInput,
   ReadDirectoryResult,
   ReadFileBytesInput,
   ReadFileBytesResult,
   ReadFileTextInput,
   ReadFileTextResult,
+  RenameEntryInput,
   StatInput,
   FileSystemStat,
   WriteFileTextInput,
@@ -103,6 +107,14 @@ const opencoveApi = {
   filesystem: {
     createDirectory: (payload: CreateDirectoryInput): Promise<void> =>
       invokeIpc(IPC_CHANNELS.filesystemCreateDirectory, payload),
+    copyEntry: (payload: CopyEntryInput): Promise<void> =>
+      invokeIpc(IPC_CHANNELS.filesystemCopyEntry, payload),
+    moveEntry: (payload: MoveEntryInput): Promise<void> =>
+      invokeIpc(IPC_CHANNELS.filesystemMoveEntry, payload),
+    renameEntry: (payload: RenameEntryInput): Promise<void> =>
+      invokeIpc(IPC_CHANNELS.filesystemRenameEntry, payload),
+    deleteEntry: (payload: DeleteEntryInput): Promise<void> =>
+      invokeIpc(IPC_CHANNELS.filesystemDeleteEntry, payload),
     readFileBytes: (payload: ReadFileBytesInput): Promise<ReadFileBytesResult> =>
       invokeIpc(IPC_CHANNELS.filesystemReadFileBytes, payload),
     readFileText: (payload: ReadFileTextInput): Promise<ReadFileTextResult> =>
